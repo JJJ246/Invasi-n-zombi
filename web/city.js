@@ -35,6 +35,8 @@ export class CityPlayer {
     this.note = root.querySelector('#cityNote');
     this.trace = null;
     this.day = 0;
+    this.time = 0; // día con fracción (la hora del día), para la vista del barrio
+    this.rate = 1; // el barrio va más lento que los mapas: un día dura lo suficiente para ver la rutina
     this.playing = false;
     this.selected = -1; // Modo Vecino: persona elegida (se sigue en los tres mapas)
     this.onSelect = null;
@@ -76,6 +78,7 @@ export class CityPlayer {
     this.note.textContent = `el mismo brote con tres decisiones distintas · se muestra la corrida típica (la mediana de los brotes que crecen, n.º ${trace.run + 1} de ${totalRuns})`;
     this.resize();
     this.show(0);
+    this.time = 0.2; // empieza al amanecer del día 0
     this.play();
   }
 
@@ -143,10 +146,11 @@ export class CityPlayer {
     return bg;
   }
 
-  show(day) {
+  show(day, keepTime = false) {
     const t = this.trace;
     if (!t) return;
     this.day = Math.max(0, Math.min(t.days, Math.floor(day)));
+    if (!keepTime) this.time = this.day + 0.45; // al elegir un día a mano: media mañana, todos en su lugar
     this.slider.value = String(this.day);
     this.dayLabel.textContent = `Día ${this.day}`;
     for (const p of this.panels) this.drawPanel(p);
@@ -290,12 +294,13 @@ export class CityPlayer {
     this.playing = true;
     this.playBtn.textContent = 'Pausa';
     let last = performance.now();
-    let acc = this.day;
+    let acc = Math.floor(this.time) === this.day ? this.time : this.day;
     const step = (now) => {
       if (!this.playing) return;
-      acc += ((now - last) / 1000) * Number(this.speed.value);
+      acc += ((now - last) / 1000) * Number(this.speed.value) * this.rate;
       last = now;
-      if (Math.floor(acc) !== this.day) this.show(acc);
+      this.time = acc;
+      if (Math.floor(acc) !== this.day) this.show(acc, true);
       if (this.day >= this.trace.days) return this.pause();
       requestAnimationFrame(step);
     };

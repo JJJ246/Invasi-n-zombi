@@ -148,8 +148,12 @@
       <div id="changes" class="card changes" hidden></div>
 
       <article class="card city">
+        <div class="view-tabs" role="tablist" aria-label="Vista">
+          <button type="button" role="tab" data-view="barrio" aria-selected="true">El barrio, de cerca</button>
+          <button type="button" role="tab" data-view="mapa" aria-selected="false">Toda la ciudad</button>
+        </div>
         <div class="city-head">
-          <h3>La ciudad, día a día <small id="cityNote">el mismo brote con tres decisiones distintas</small></h3>
+          <h3>El plan, día a día <small id="cityNote">el mismo brote con tres decisiones distintas</small></h3>
           <div class="city-controls">
             <button type="button" id="playBtn" disabled>Reproducir</button>
             <input type="range" id="daySlider" min="0" max="120" value="0" disabled aria-label="Día">
@@ -163,9 +167,22 @@
             <button type="button" id="fullBtn" title="Pantalla completa">Pantalla completa</button>
           </div>
         </div>
-        <p class="hint tap">Toca cualquier punto del mapa: es una persona, con su casa, su rutina y su historia.</p>
+        <p class="hint tap" id="tapHint">Toca a cualquier vecino: es una persona de la simulación, con su casa, su rutina y su historia.</p>
         <div class="city-body">
-          <div class="city-grid">
+          <div class="views">
+          <section class="barrio" id="barrio" aria-label="Un barrio visto de cerca">
+            <div class="barrio-strats" role="group" aria-label="Qué decisión ver"></div>
+            <div class="barrio-canvas-wrap">
+              <canvas aria-label="Barrio en perspectiva: cada figura es una persona; el rombo sobre su cabeza es su estado"></canvas>
+              <div class="barrio-top">
+                <span class="barrio-clock">Día 0</span>
+                <span class="barrio-name"></span>
+                <button type="button" class="barrio-next">Ver otro barrio</button>
+              </div>
+            </div>
+            <p class="barrio-caption events"></p>
+          </section>
+          <div class="city-grid" hidden>
             <figure class="panel-city" data-strategy="nada">
               <figcaption><span class="dot" style="--c: var(--bad)"></span>Sin hacer nada</figcaption>
               <canvas></canvas>
@@ -182,11 +199,13 @@
               <div class="city-stats"></div>
             </figure>
           </div>
+          </div>
           <aside id="vecino" class="vecino" hidden aria-live="polite"></aside>
         </div>
         <div class="legend" id="legend"></div>
         <p id="cityEvents" class="events"></p>
-        <p class="attribution">Mapa real: imagen satelital © Esri, Maxar, Earthstar Geographics · límites y densidad de edificios © colaboradores de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>. Cada punto es una persona simulada, ubicada donde de verdad hay casas.</p>
+        <p class="attribution" id="barrioNote">Casas y vecinos son los de la simulación (los hogares más cercanos entre sí en el mapa real). Calle, mercado, colegio y atunera son un dibujo esquemático. Nombres y edades son ilustrativos.</p>
+        <p class="attribution" id="mapNote" hidden>Mapa real: imagen satelital © Esri, Maxar, Earthstar Geographics · límites y densidad de edificios © colaboradores de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>. Cada punto es una persona simulada, ubicada donde de verdad hay casas.</p>
       </article>
 
       <article class="card">

@@ -2,6 +2,7 @@ import { makeConfig } from './engine/config.js';
 import { CITIES } from './engine/cities.js';
 import { headline, mayorReport, TERMS } from './engine/report.js';
 import { CityPlayer } from './city.js';
+import { Barrio } from './barrio.js';
 import { renderVecino, interestingPeople } from './vecino.js';
 import { CALIBRATION } from './engine/calibration.js';
 import { DENGUE_MANABI_2024 } from './engine/dengue-manabi-2024.js';
@@ -38,6 +39,29 @@ let previous = null; // último resultado, para mostrar qué cambió tras un Bro
 let scenario = 'zombi';
 const terms = () => TERMS[SCENARIOS[scenario].theme];
 const player = new CityPlayer(document.querySelector('.city'));
+const barrio = new Barrio($('barrio'), player);
+
+// Vista: el barrio de cerca (vecinos caminando, al estilo de un juego) o toda la ciudad (tres mapas).
+function setView(view) {
+  const isBarrio = view === 'barrio';
+  for (const b of document.querySelectorAll('[data-view]')) b.setAttribute('aria-selected', String(b.dataset.view === view));
+  $('barrio').hidden = !isBarrio;
+  document.querySelector('.city-grid').hidden = isBarrio;
+  $('barrioNote').hidden = !isBarrio;
+  $('mapNote').hidden = isBarrio;
+  $('cityEvents').hidden = isBarrio;
+  barrio.setActive(isBarrio);
+  if (!isBarrio && player.trace) player.resize();
+  if (player.playing) {
+    player.pause(); // vuelve a arrancar con la nueva velocidad
+    player.play();
+  }
+}
+document.querySelector('.view-tabs').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-view]');
+  if (b) setView(b.dataset.view);
+});
+setView('barrio');
 
 // ---------- Escenarios y ciudad ----------
 $('scenarios').innerHTML = Object.entries(SCENARIOS)
@@ -128,6 +152,7 @@ const vecino = $('vecino');
 let neighbours = [];
 let nextNeighbour = 0;
 player.onSelect = (i) => {
+  barrio.focus(i);
   renderVecino(vecino, player.trace, i, player.day, SCENARIOS[scenario].theme);
   vecino.hidden = false;
 };
@@ -195,6 +220,7 @@ function loadCity(s) {
   worker.onmessage = ({ data }) => {
     worker.terminate();
     if (data.type !== 'trace') return;
+    barrio.load(data.trace, makeConfig(s.config), SCENARIOS[scenario].theme, terms());
     player.load(data.trace, s.config, s.runs, terms());
     vecino.hidden = true;
     neighbours = interestingPeople(data.trace);

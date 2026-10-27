@@ -176,3 +176,26 @@ button.primary:hover:not(:disabled) { filter: brightness(1.08); }
 button.link { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline dotted; cursor: pointer; font: inherit; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+
+/* Vista: el barrio de cerca o toda la ciudad */
+.view-tabs { display: inline-flex; gap: 0.25rem; padding: 0.25rem; margin-bottom: 0.8rem; background: #0a0d11; border: 1px solid var(--line); border-radius: 9px; }
+.view-tabs button { border: 0; background: transparent; color: var(--muted); padding: 0.45rem 0.9rem; border-radius: 6px; font-weight: 600; }
+.view-tabs button[aria-selected="true"] { background: var(--panel-2); color: var(--text); box-shadow: inset 0 0 0 1px var(--line); }
+.views { min-width: 0; }
+
+/* El barrio, de cerca */
+.barrio-strats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.4rem; margin-bottom: 0.5rem; }
+.barrio-strats button { text-align: left; display: grid; gap: 0.1rem; padding: 0.5rem 0.7rem; border-radius: 8px; border: 1px solid var(--line); background: #0a0d11; color: var(--muted); font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.barrio-strats button b { color: var(--text); font-size: 0.88rem; }
+.barrio-strats button[data-strategy="nada"].on { border-color: var(--bad); background: #2a1416; }
+.barrio-strats button[data-strategy="azar"].on { border-color: var(--warn); background: #2a2212; }
+.barrio-strats button[data-strategy="adaptativa"].on { border-color: var(--good); background: #10261b; }
+@media (max-width: 600px) { .barrio-strats { grid-template-columns: 1fr; } }
+.barrio-canvas-wrap { position: relative; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; background: #0c1117; }
+.barrio-canvas-wrap canvas { display: block; width: 100%; aspect-ratio: 1 / 0.56; }
+.barrio-top { position: absolute; top: 0.5rem; left: 0.5rem; right: 0.5rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; pointer-events: none; }
+.barrio-top > * { pointer-events: auto; }
+.barrio-clock { font: 700 1rem ui-monospace, SFMono-Regular, Menlo, monospace; background: #0c1117d9; padding: 0.3rem 0.6rem; border-radius: 6px; font-variant-numeric: tabular-nums; }
+.barrio-name { font-size: 0.8rem; color: #d6dbe1; background: #0c1117b3; padding: 0.3rem 0.55rem; border-radius: 6px; }
+.barrio-next { margin-left: auto; font-size: 0.8rem; padding: 0.3rem 0.65rem; background: #0c1117d9; }
+.city:fullscreen .barrio-canvas-wrap canvas { max-height: 78vh; object-fit: contain; }

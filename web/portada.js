@@ -8,30 +8,35 @@ const fmt = (x) => Math.round(x).toLocaleString('es-EC');
 const clamp = (x) => Math.max(0, Math.min(1, x));
 
 // ---------- 1. La película ----------
-const FRAMES = 358;
+// Fluidez a 60 fps: (1) cada cuadro se decodifica antes de necesitarlo (ImageBitmap, fuera del hilo
+// principal), así dibujar nunca bloquea; (2) entre dos cuadros se hace un fundido, así el movimiento
+// es continuo aunque el scroll avance de a poco; (3) solo se redibuja cuando algo cambió.
+const FRAMES = 432;
+const AHEAD = 24; // cuadros decodificados por delante y por detrás de lo que se ve
 const film = $('film');
 const fc = $('filmCanvas');
-const fctx = fc.getContext('2d');
-const frames = new Array(FRAMES);
-const loaded = new Uint8Array(FRAMES);
+const fctx = fc.getContext('2d', { alpha: false });
+const frames = new Array(FRAMES); // imágenes descargadas (comprimidas)
+const bitmaps = new Map(); // cuadro → ImageBitmap listo para dibujar
+const decoding = new Set();
 let target = 0; // cuadro que pide el scroll
 let shown = 0; // cuadro que se ve (se acerca suave al pedido)
-let drawn = -1;
+let drawnAt = -1;
+let firstReady = false;
 
 // Orden de carga: primero 1 de cada 8 cuadros (la película ya se puede recorrer), luego 1 de cada 4, luego el resto.
 const order = [];
-for (const step of [8, 4, 2, 1]) for (let i = 0; i < FRAMES; i += step) if (!order.includes(i)) order.push(i);
+const queued = new Uint8Array(FRAMES);
+for (const step of [8, 4, 2, 1]) for (let i = 0; i < FRAMES; i += step) if (!queued[i]) (queued[i] = 1), order.push(i);
 let next = 0;
 function loadMore() {
   if (next >= order.length) return;
   const i = order[next++];
   const img = new Image();
-  img.decoding = 'async';
   img.onload = () => {
     frames[i] = img;
-    loaded[i] = 1;
-    if (next === Math.ceil(FRAMES / 8)) $('filmLoading').style.opacity = 0;
-    if (Math.abs(i - Math.round(shown)) < 8) drawn = -1;
+    if (next >= Math.ceil(FRAMES / 8)) $('filmLoading').style.opacity = 0;
+    if (Math.abs(i - shown) <= AHEAD) decodeAround();
     loadMore();
   };
   img.onerror = loadMore;
@@ -39,49 +44,117 @@ function loadMore() {
 }
 for (let k = 0; k < 6; k++) loadMore(); // 6 descargas en paralelo
 
-function nearestLoaded(i) {
+// Mantiene decodificados los cuadros cercanos y libera la memoria de los lejanos.
+function decodeAround() {
+  const c = Math.round(shown);
+  for (const [k, bmp] of bitmaps) {
+    if (Math.abs(k - c) > AHEAD * 1.5) {
+      bmp.close?.();
+      bitmaps.delete(k);
+    }
+  }
+  for (let d = 0; d <= AHEAD; d++) {
+    for (const k of [c + d, c - d]) {
+      if (k < 0 || k >= FRAMES || !frames[k] || bitmaps.has(k) || decoding.has(k)) continue;
+      decoding.add(k);
+      createImageBitmap(frames[k])
+        .then((bmp) => {
+          decoding.delete(k);
+          if (Math.abs(k - shown) > AHEAD * 1.5) return bmp.close?.();
+          bitmaps.set(k, bmp);
+          drawnAt = -1;
+        })
+        .catch(() => decoding.delete(k));
+    }
+  }
+}
+
+// El cuadro decodificado más cercano a i (hacia atrás primero, para no adelantarse a la historia).
+function nearestBitmap(i) {
   for (let d = 0; d < FRAMES; d++) {
-    if (i - d >= 0 && loaded[i - d]) return i - d;
-    if (i + d < FRAMES && loaded[i + d]) return i + d;
+    if (bitmaps.has(i - d)) return i - d;
+    if (bitmaps.has(i + d)) return i + d;
   }
   return -1;
 }
 
+// El lienzo usa la resolución de la película (1280 px), no la de la pantalla: menos píxeles que pintar.
+let cover = null;
 function sizeFilm() {
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  fc.width = Math.round(fc.clientWidth * dpr);
-  fc.height = Math.round(fc.clientHeight * dpr);
-  drawn = -1;
+  const w = Math.min(1600, fc.clientWidth);
+  fc.width = Math.round(w);
+  fc.height = Math.round((w * fc.clientHeight) / Math.max(1, fc.clientWidth));
+  cover = null;
+  drawnAt = -1;
 }
 new ResizeObserver(sizeFilm).observe(fc);
 
-function drawFilm() {
-  const k = nearestLoaded(Math.round(shown));
-  if (k < 0 || k === drawn) return;
-  drawn = k;
-  const img = frames[k];
-  // "cover": la imagen llena la pantalla sin deformarse.
-  const s = Math.max(fc.width / img.naturalWidth, fc.height / img.naturalHeight);
-  const w = img.naturalWidth * s;
-  const h = img.naturalHeight * s;
-  fctx.drawImage(img, (fc.width - w) / 2, (fc.height - h) / 2, w, h);
+function blit(bmp, alpha) {
+  if (!cover) {
+    // "cover": la imagen llena la pantalla sin deformarse.
+    const s = Math.max(fc.width / bmp.width, fc.height / bmp.height);
+    const w = bmp.width * s;
+    const h = bmp.height * s;
+    cover = [(fc.width - w) / 2, (fc.height - h) / 2, w, h];
+  }
+  fctx.globalAlpha = alpha;
+  fctx.drawImage(bmp, ...cover);
 }
 
-const caps = [...document.querySelectorAll('.cap')].map((el) => ({ el, from: +el.dataset.from, to: +el.dataset.to }));
+function drawFilm() {
+  if (Math.abs(shown - drawnAt) < 0.004) return;
+  const a = Math.floor(shown);
+  const t = shown - a;
+  const ka = bitmaps.has(a) ? a : nearestBitmap(a);
+  if (ka < 0) return;
+  drawnAt = shown;
+  blit(bitmaps.get(ka), 1);
+  // Fundido con el cuadro siguiente: el paso entre cuadros no se nota.
+  if (ka === a && t > 0.02 && bitmaps.has(a + 1)) blit(bitmaps.get(a + 1), t);
+  fctx.globalAlpha = 1;
+  if (!firstReady) {
+    firstReady = true;
+    $('filmLoading').style.opacity = 0;
+  }
+}
+
+const caps = [...document.querySelectorAll('.cap')].map((el) => ({ el, from: +el.dataset.from, to: +el.dataset.to, o: -1 }));
+const bar = $('filmBar');
+const hint = $('scrollHint');
+let filmVisible = true;
 function onFilmScroll() {
   const r = film.getBoundingClientRect();
+  filmVisible = r.bottom > 0;
   const p = clamp(-r.top / Math.max(1, r.height - innerHeight));
   target = p * (FRAMES - 1);
-  $('filmBar').style.width = `${p * 100}%`;
-  $('scrollHint').style.opacity = p > 0.02 ? 0 : 1;
+  bar.style.transform = `scaleX(${p})`;
+  hint.style.opacity = p > 0.02 ? 0 : 1;
   const fade = 0.025;
-  for (const c of caps) c.el.style.setProperty('--o', (clamp((p - c.from) / fade) * clamp((c.to - p) / fade)).toFixed(3));
+  for (const c of caps) {
+    const o = Math.round(clamp((p - c.from) / fade) * clamp((c.to - p) / fade) * 100) / 100;
+    if (o === c.o) continue; // solo se toca el estilo cuando cambia
+    c.o = o;
+    c.el.style.opacity = o;
+    c.el.style.transform = `translate3d(0, ${(1 - o) * 18}px, 0)`;
+    c.el.style.visibility = o ? 'visible' : 'hidden';
+  }
 }
 
-function filmLoop() {
-  shown += (target - shown) * 0.18; // suavizado: se siente como video aunque el scroll sea a saltos
-  if (Math.abs(target - shown) < 0.05) shown = target;
-  drawFilm();
+let lastT = performance.now();
+let lastDecode = -1;
+function filmLoop(now) {
+  const dt = Math.min(0.05, (now - lastT) / 1000);
+  lastT = now;
+  if (filmVisible) {
+    // Suavizado que no depende de los fps de la pantalla (60, 120 o 144 Hz se ven igual).
+    shown += (target - shown) * (1 - Math.exp(-dt * 9));
+    if (Math.abs(target - shown) < 0.002) shown = target;
+    if (Math.round(shown) !== lastDecode) {
+      lastDecode = Math.round(shown);
+      decodeAround();
+    }
+    drawFilm();
+  }
   requestAnimationFrame(filmLoop);
 }
 addEventListener('scroll', onFilmScroll, { passive: true });

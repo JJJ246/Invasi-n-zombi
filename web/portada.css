@@ -19,20 +19,21 @@ a { color: var(--orange); }
 /* ---------- La película ---------- */
 .film { position: relative; height: 1100vh; }
 .film-sticky { position: sticky; top: 0; height: 100vh; overflow: hidden; }
-#filmCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #000; }
-.film-shade { position: absolute; inset: 0; pointer-events: none;
+#filmCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: #000; transform: translateZ(0); }
+.film-shade { position: absolute; inset: 0; pointer-events: none; transform: translateZ(0);
   background: linear-gradient(0deg, #000c 0%, #0000 38%), linear-gradient(180deg, #0007 0%, #0000 22%), radial-gradient(ellipse at 50% 50%, #0000 55%, #0008 100%); }
 .captions { position: absolute; left: 6vw; right: 6vw; bottom: 12vh; pointer-events: none; }
-/* Cada texto aparece y se va según el avance (--o lo pone el JS); todos en el mismo lugar, uno a la vez. */
-.cap { --o: 0; position: absolute; left: 0; bottom: 0; max-width: 46rem; margin: 0; opacity: var(--o);
-  transform: translateY(calc((1 - var(--o)) * 18px)); filter: blur(calc((1 - var(--o)) * 4px));
+/* Cada texto aparece y se va según el avance (opacidad y posición las pone el JS); todos en el mismo
+   lugar, uno a la vez. Solo opacidad y transform: la tarjeta gráfica lo hace sin repintar. */
+.cap { position: absolute; left: 0; bottom: 0; max-width: 46rem; margin: 0; opacity: 0; visibility: hidden;
+  will-change: opacity, transform;
   font-size: clamp(1.35rem, 2.8vw, 2.3rem); line-height: 1.3; font-weight: 600; text-shadow: 0 2px 24px #000, 0 0 2px #000; }
 .cap .time { display: block; margin-bottom: 0.5rem; font: 0.95rem 'Special Elite', monospace; color: var(--orange); letter-spacing: 0.08em; text-transform: uppercase; }
 .cap b { font-weight: 800; }
 .cap.final { font-size: clamp(2.2rem, 5vw, 4rem); }
 .film-ui { position: absolute; inset: auto 0 0 0; padding: 0 6vw 4vh; }
 .film-progress { height: 2px; background: #ffffff22; }
-.film-progress b { display: block; height: 100%; width: 0; background: var(--orange); }
+.film-progress b { display: block; height: 100%; width: 100%; transform: scaleX(0); transform-origin: left; background: var(--orange); will-change: transform; }
 .scroll-hint, .loading { position: absolute; right: 6vw; bottom: 6.5vh; margin: 0; font: 0.85rem 'Special Elite', monospace; color: var(--muted); transition: opacity 0.4s; }
 .loading { left: 6vw; right: auto; }
 
