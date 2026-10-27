@@ -35,7 +35,8 @@ DISTRIBUTION="$(output DistributionId)"
 
 echo "==> Web"
 node scripts/build-web.mjs "$API_URL"
-aws s3 sync dist "s3://$BUCKET" --delete --region "$REGION"
+# macOS crea archivos ._* al escribir en discos externos: no se suben.
+aws s3 sync dist "s3://$BUCKET" --delete --region "$REGION" --exclude "._*" --exclude "*/._*" --exclude "*.DS_Store"
 aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths "/*" --query 'Invalidation.Id' --output text
 
 echo

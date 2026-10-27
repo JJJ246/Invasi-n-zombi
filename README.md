@@ -2,7 +2,7 @@
 
 **SpookyThon 2026 · Track B.** Una herramienta que simula cómo se propaga una plaga en Manta y encuentra **qué hacer, dónde y cuándo** (vacunas, cuarentenas y cierres) con recursos limitados. Muestra con números cuánta gente se salva frente a **no hacer nada** y frente a **actuar al azar con los mismos recursos**.
 
-- **App desplegada:** _URL de CloudFront (se completa al desplegar)_
+- **App desplegada:** https://d3op4ankgl1i6w.cloudfront.net (región **us-east-1**, N. Virginia: la más barata y con todos los servicios que usamos)
 - **Arquitectura:** [docs/arquitectura.svg](docs/arquitectura.svg) (fuente: [docs/arquitectura.mmd](docs/arquitectura.mmd))
 - **Costos:** [docs/costos.md](docs/costos.md)
 - **Resultados reproducibles de todos los escenarios:** [docs/resultados.md](docs/resultados.md)
