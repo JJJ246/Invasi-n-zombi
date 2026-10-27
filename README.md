@@ -1,6 +1,6 @@
-# Comité de Contención 🧟 — La Plaga Zombie en Manta
+# Comité de Contención — simulador de brotes y plan de respuesta
 
-**SpookyThon 2026 · Track B.** Una herramienta que simula cómo se propaga una plaga en Manta y encuentra **qué hacer, dónde y cuándo** (vacunas, cuarentenas y cierres) con recursos limitados. Muestra con números cuánta gente se salva frente a **no hacer nada** y frente a **actuar al azar con los mismos recursos**.
+**SpookyThon 2026 · Track B (La Plaga Zombie).** Una herramienta que simula cómo se propaga un brote en una ciudad real y encuentra **qué hacer, dónde y cuándo** (vacunas, cuarentenas, cierres y fumigación) con recursos limitados. Viene con **Manta** (la plaga zombi del reto) y **Guayaquil** (dengue durante las lluvias de **El Niño 2026**), y se adapta a otra ciudad o enfermedad cambiando datos, no código. Muestra con números cuánta gente se salva frente a **no hacer nada** y frente a **actuar al azar con los mismos recursos**.
 
 - **App desplegada:** https://d3op4ankgl1i6w.cloudfront.net (región **us-east-1**, N. Virginia: la más barata y con todos los servicios que usamos)
 - **Arquitectura:** [docs/arquitectura.svg](docs/arquitectura.svg) (fuente: [docs/arquitectura.mmd](docs/arquitectura.mmd))
@@ -26,7 +26,7 @@ Tabla completa con rangos, política elegida y huella de cada escenario: [docs/r
 
 ## Qué hace
 
-1. **Simula la propagación día a día** en una red de contactos sintética de Manta: hogares, colegios, trabajos, buses, mercados y barrios de las 5 parroquias urbanas.
+1. **Simula la propagación día a día** en una red de contactos sintética de la ciudad: hogares, colegios, trabajos, buses, mercados y barrios de cada zona (5 parroquias urbanas en Manta, 7 zonas en Guayaquil).
 2. **Aplica intervenciones con recursos limitados**: vacunas que llegan por día, cuarentena del hogar de cada caso reportado y cierre de mercados o colegios por parroquia, todo pagado con un presupuesto total.
 3. **Compara la estrategia contra dos líneas base**: no intervenir, e intervenir **al azar con exactamente los mismos recursos** (mismas dosis por día, mismas cuarentenas, mismos bloques de cierre).
 4. **Repite la simulación muchas veces** (Monte Carlo) y reporta **promedios y rangos** (percentiles 5 % y 95 %).
@@ -34,16 +34,20 @@ Tabla completa con rangos, política elegida y huella de cada escenario: [docs/r
 6. Es **reproducible**: misma configuración + misma semilla = mismo resultado, en el navegador y en AWS (está probado en los tests).
 7. Está **desplegada en AWS** (S3 + CloudFront + API Gateway + Lambda).
 8. Genera un **informe para el alcalde** en lenguaje simple.
-9. **La ciudad en vivo:** mapa **real** de Manta (imagen satelital de Esri y límites oficiales de las 5 parroquias urbanas de OpenStreetMap) con 10.000 personas ubicadas donde de verdad hay edificios y calles, en tres paneles (no hacer nada / al azar / Comité) para el mismo brote, con cuarentenas, cierres y fumigaciones día a día, y pantalla completa para proyectar. Se anima la corrida **mediana** de los brotes que despegan, no la más favorable.
-10. **Calibración con datos reales:** el mismo motor, ajustado a los casos semanales de dengue en Manabí 2024 del Ministerio de Salud Pública (ver [docs/calibracion.md](docs/calibracion.md)). El botón 🦟 aplica esa plaga calibrada a Manta, con brigadas de fumigación.
+9. **La ciudad día a día:** mapa **real** de la ciudad (imagen satelital de Esri y límites oficiales de las zonas en OpenStreetMap) con 10.000 personas ubicadas donde de verdad hay edificios y calles, en tres paneles (no hacer nada / al azar / Comité) para el mismo brote, con cuarentenas, cierres y fumigaciones día a día, y pantalla completa para proyectar. Se anima la corrida **mediana** de los brotes que despegan, no la más favorable.
+10. **Calibración con datos reales:** el mismo motor, ajustado a los casos semanales de dengue en Manabí 2024 del Ministerio de Salud Pública (ver [docs/calibracion.md](docs/calibracion.md)). Las plantillas "Dengue" y "El Niño 2026" usan ese contagio, con brigadas de fumigación.
 11. **"¿Qué cambió?"** tras cada Brote Sorpresa: antes y después, y la explicación en palabras de cómo cambió la recomendación.
+12. **Conocer a un vecino:** detrás de cada punto del mapa hay una persona simulada: su casa, su rutina, qué le pasa en cada estrategia, quién la contagió y dónde, la cadena hasta el paciente cero y **por qué el plan la vacunó** (los nombres son ilustrativos; lo demás sale de la simulación).
+13. **Adaptable:** la ciudad y la enfermedad son datos. Ver "Adaptarlo a otra ciudad o enfermedad" más abajo.
 
 ## Cómo usarla
 
-1. Abre la app. Pulsa **Simular** (100 simulaciones, unos 10 segundos en el navegador; con la casilla "Correr en AWS", en paralelo en Lambda).
-2. Lee la frase de arriba y los cuatro indicadores: cuántos se salvan frente a no hacer nada, frente al azar, en cuántos brotes gana y cuánto cuesta.
-3. Cambia las condiciones con los botones de **Brote Sorpresa** (×2 contagio, ½ vacunas, empieza en el mercado, vacuna que cubre a medias, respuesta tardía, ½ presupuesto). La estrategia **se vuelve a optimizar sola**.
-4. Copia el **Informe para el alcalde**.
+1. **¿Qué está pasando?** Elige una plantilla (plaga zombi en Manta, gripe fuerte, dengue o El Niño 2026 en Guayaquil), la ciudad y dónde empieza.
+2. **¿Con qué recursos?** Vacunas por día, cuánto protegen, presupuesto y desde qué día actúa el comité (el resto, en "Más supuestos").
+3. Pulsa **Calcular el mejor plan** (100 simulaciones en el navegador, o en paralelo en AWS Lambda).
+4. Lee el **plan recomendado**: los pasos en lenguaje simple, cuántas personas protege y si supera a las líneas base con prueba estadística.
+5. Cambia las condiciones con **Brote sorpresa** (el doble de contagioso, la mitad de vacunas, vacuna que protege a medias, 10 días tarde, la mitad del presupuesto, otro mercado). El plan **se recalcula solo** y muestra qué cambió.
+6. Toca un punto del mapa para **conocer a un vecino**, o copia el **informe para la alcaldía**.
 
 ---
 
@@ -137,6 +141,24 @@ Todos están en [src/engine/config.js](src/engine/config.js) y se pueden cambiar
 | Dengue: días como "mordido" | 8–14 | Incubación en humanos (media 5,9 días) + incubación dentro del mosquito (2–15 días a 30 °C): [Chan y Johansson 2012](https://doi.org/10.1371/journal.pone.0050972) |
 | Dengue: días contagioso | 3–7 | Fiebre de 2 a 7 días (CDC) |
 | Dengue: R0 efectivo | ver [docs/calibracion.md](docs/calibracion.md) | **Calibrado** con los casos semanales de Manabí 2024 (MSP) |
+| Dengue: casos al inicio | 10 | **SUPUESTO**: el brote se detecta con varios casos (con uno solo casi siempre se apaga) |
+
+### Guayaquil y El Niño 2026
+
+| Parámetro | Valor | Fuente / justificación |
+|---|---|---|
+| Población urbana de Guayaquil | 2.650.288 | INEC, Censo 2022 (cantón: 2.746.403 personas, 810.562 hogares) — [El Universo](https://www.eluniverso.com/guayaquil/comunidad/censo-ecuador-cifras-en-guayaquil-analisis-estadisticas-nota/) |
+| Personas por hogar | 3,39 | 2.746.403 / 810.562 (mismo censo) |
+| Zonas | Tarqui, Pascuales, Centro, Febres Cordero, Letamendi, García Moreno, Ximena | Parroquias urbanas en OpenStreetMap. "Centro" agrupa las 9 parroquias pequeñas del casco central; Ximena se arma con sus barrios en OSM; Chongón no se incluye |
+| Reparto entre zonas | Tarqui 47 %, Ximena 24 %, Febres Cordero 15 %, Letamendi 4 %, Centro 4 %, Pascuales 3 %, García Moreno 2 % | Proporciones del Censo 2010 por parroquia (INEC: Tarqui 1.050.826, Ximena 546.254, Febres Cordero 343.836…), escaladas a la población de 2022 |
+| Vacunas por día / presupuesto | 25.000 / USD 3.000.000 | **SUPUESTO**: los mismos recursos por habitante que en Manta (≈ 10 veces) |
+| Cierre de una zona / fumigación | USD 30.000 / 15.000 por día | **SUPUESTO**: zonas ≈ 5 veces más grandes que las parroquias de Manta |
+| El Niño: contagio del dengue | R0 = 1,6 × 1,5 = 2,4 | **SUPUESTO**: El Niño (lluvia, calor y humedad) aumenta la densidad de *Aedes aegypti* ([Primicias, sept. 2026](https://www.primicias.ec/sociedad/fenomeno-nino-2026-ecuador-impacto-salud-aumento-enfermedades-dengue-hospitales-pacientes-131802/)); se modela como un contagio 50 % mayor que el calibrado en 2024 |
+
+### Adaptarlo a otra ciudad o enfermedad
+
+- **Otra enfermedad:** es una plantilla en [web/escenarios.js](web/escenarios.js) (contagio, días de incubación y de contagio, si la transmite un mosquito, vocabulario). También se cambia todo desde la interfaz.
+- **Otra ciudad:** 1) agregar sus zonas (ids de relaciones administrativas de OpenStreetMap) en [scripts/build-map.py](scripts/build-map.py) y correr `python3 scripts/build-map.py <ciudad>`; 2) agregar su población, hogares y reparto entre zonas en [src/engine/cities.js](src/engine/cities.js). El motor, la estrategia, la interfaz y AWS no cambian.
 
 ## Parámetros por defecto y semilla (para reproducir)
 
@@ -144,11 +166,12 @@ Todos están en [src/engine/config.js](src/engine/config.js) y se pueden cambiar
 - Desde la terminal (mismo motor que la web y Lambda):
 
 ```bash
-npm test                                  # 21 tests: reproducibilidad, nunca vacunar casos reportados, presupuesto...
+npm test                                  # 23 tests: reproducibilidad, nunca vacunar casos reportados, presupuesto, otra ciudad...
 node scripts/simulate.mjs                 # escenario por defecto
 node scripts/simulate.mjs '{"r0":3.6,"seed":7,"runs":200}'
 node scripts/scenarios.mjs 200            # regenera docs/resultados.md
-python3 scripts/build-map.py              # regenera el mapa real (web/img/manta-satelite.jpg y src/engine/manta-map.js)
+python3 scripts/build-map.py manta       # regenera el mapa real (web/img/manta-satelite.jpg y src/engine/maps/manta.js)
+python3 scripts/build-map.py guayaquil
 ```
 
 La interfaz muestra la **huella de la configuración** (hash): si la huella y la semilla coinciden, el resultado es idéntico.

@@ -3,162 +3,109 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Manta, Día 0 · Comité de Contención</title>
-  <meta name="description" content="Una plaga empieza en el mercado de Tarqui. El Comité de Contención decide a quién vacunar, qué cerrar y dónde fumigar para salvar a Manta.">
+  <title>Manta, 31 de octubre · Comité de Contención</title>
+  <meta name="description" content="Una plaga empieza en el mercado de Tarqui. Una historia que avanza con el scroll y el simulador que decide a quién vacunar, qué cerrar y dónde fumigar.">
+  <meta property="og:image" content="film/000.webp">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Special+Elite&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="portada.css">
-  <meta property="og:image" content="img/escenas/noche.jpg">
   <script type="module" src="portada.js"></script>
 </head>
 <body>
-  <div class="ticker" aria-hidden="true">
-    <div class="ticker-track">
-      <span>⚠ TRANSMISIÓN DE EMERGENCIA</span><span>Caso reportado en el mercado de Tarqui</span><span>Comité de Contención activado</span>
-      <span>2.500 vacunas por día</span><span>Presupuesto: USD 300.000</span><span>Cada zombi muerde en promedio a 1,8 personas</span>
-      <span>⚠ TRANSMISIÓN DE EMERGENCIA</span><span>Caso reportado en el mercado de Tarqui</span><span>Comité de Contención activado</span>
-      <span>2.500 vacunas por día</span><span>Presupuesto: USD 300.000</span><span>Cada zombi muerde en promedio a 1,8 personas</span>
-    </div>
-  </div>
-
-  <header class="hero">
-    <canvas id="heroMap" aria-label="Mapa satelital de Manta con la plaga avanzando día a día"></canvas>
-    <div class="fog"></div>
-    <div class="hero-text">
-      <p class="stamp">Expediente 2026-B · SpookyThon · Manta, Manabí</p>
-      <h1 class="glitch" data-text="MANTA, DÍA 0">MANTA, DÍA 0</h1>
-      <p class="lead">Un solo caso en el mercado de Tarqui. Cada mordido contagia en casa, en el bus, en el colegio, en el mercado.
-        <strong>No hay vacunas para todos. No se puede cerrar la ciudad.</strong></p>
-      <div class="hud">
-        <div><span>Día</span><b id="hDay">0</b></div>
-        <div><span id="hWorldLabel">Si nadie hace nada</span><b id="hBitten" class="red">1</b><small>mordidos</small></div>
+  <!-- La película: el scroll avanza cuadro a cuadro; los textos aparecen en su momento. -->
+  <section class="film" id="film" aria-label="Historia: una noche en Manta">
+    <div class="film-sticky">
+      <canvas id="filmCanvas"></canvas>
+      <div class="film-shade"></div>
+      <div class="captions">
+        <p class="cap" data-from="0" data-to="0.11"><span class="time">31 de octubre · 23:47</span>Manta duerme. Los barcos atuneros se mecen en la bahía.</p>
+        <p class="cap" data-from="0.13" data-to="0.25"><span class="time">Mercado de Tarqui</span>Alguien muerde a alguien.<br><b>Nadie lo nota.</b></p>
+        <p class="cap" data-from="0.27" data-to="0.38"><span class="time">Si nadie hace nada</span>Casa, bus, colegio, mercado.<br>Uno de cada tres habitantes termina <b class="red">mordido</b>.</p>
+        <p class="cap" data-from="0.40" data-to="0.52"><span class="time">Comité de Contención</span>No hay vacunas para todos. No se puede cerrar la ciudad.<br>Solo se ven los casos reportados.</p>
+        <p class="cap" data-from="0.54" data-to="0.66"><span class="time">El plan</span>Aislar el hogar de cada caso. Vacunar primero a su entorno.<br>Cerrar o fumigar <b>solo donde hace falta</b>.</p>
+        <p class="cap" data-from="0.68" data-to="0.82"><span class="time">Día 120, con el plan</span><b class="green">79.000 personas</b> que no fueron mordidas.<br>99 % menos que sin hacer nada.</p>
+        <p class="cap final" data-from="0.86" data-to="1.01"><span class="time">Amanece</span>Manta sigue en pie.</p>
       </div>
-      <div class="hero-actions">
-        <button type="button" id="worldBtn" class="btn btn-green" disabled>🛡️ Ahora con el Comité</button>
-        <a class="btn btn-orange" href="index.html">Entrar al Centro de Mando →</a>
+      <div class="film-ui">
+        <div class="film-progress"><b id="filmBar"></b></div>
+        <p class="scroll-hint" id="scrollHint">Desliza para ver la historia ↓</p>
+        <p class="loading" id="filmLoading">Cargando la película…</p>
       </div>
-      <p class="hero-note" id="heroNote">Simulando el brote en tu navegador…</p>
     </div>
-    <a href="#amenaza" class="scroll" aria-label="Bajar">⌄</a>
-  </header>
-
-  <div class="infection" aria-hidden="true"><b id="infectionBar"></b><span id="infectionLabel">Nivel de contagio 0 %</span></div>
+  </section>
 
   <main>
-    <!-- Prólogo: las frases aparecen una a una con el scroll. -->
-    <section class="scene prologue" style="--img: url(img/escenas/noche.jpg)">
-      <div class="scene-sticky"><div class="scene-bg"></div><div class="scene-shade"></div></div>
-      <div class="scene-content">
-        <p class="line">31 de octubre. 23:47.</p>
-        <p class="line">Manta duerme. Los barcos atuneros se mecen en la bahía.</p>
-        <p class="line">En el mercado de Tarqui, alguien muerde a alguien.</p>
-        <p class="line big red">Nadie lo nota.</p>
+    <!-- Después de la historia: el motor real, en vivo. -->
+    <section class="live" id="motor">
+      <canvas id="heroMap" aria-label="Mapa satelital de Manta con el brote avanzando día a día"></canvas>
+      <div class="live-text">
+        <p class="kicker">No es una película: es el motor</p>
+        <h2 id="liveTitle">Manta, día 0</h2>
+        <p>Esto es una simulación real, corriendo ahora en tu navegador: 10.000 personas sobre el mapa satelital de Manta, cada una con su casa, su bus, su colegio o su trabajo.</p>
+        <div class="hud">
+          <div><span>Día</span><b id="hDay">0</b></div>
+          <div><span id="hWorldLabel">Si nadie hace nada</span><b id="hBitten" class="red">1</b><small>mordidos</small></div>
+        </div>
+        <div class="actions">
+          <button type="button" id="worldBtn" class="btn btn-green" disabled>Ver con el plan del Comité</button>
+          <a class="btn btn-orange" href="index.html">Abrir el simulador →</a>
+        </div>
+        <p class="note" id="heroNote">Simulando el brote…</p>
       </div>
     </section>
 
-    <section id="amenaza" class="scene" style="--img: url(img/escenas/mercado.jpg)">
-      <div class="scene-sticky"><div class="scene-bg"></div><div class="scene-shade"></div></div>
-      <div class="scene-content">
-        <div class="glass reveal">
-          <p class="kicker">01 · La amenaza</p>
-          <h2 class="words">Si nadie hace nada, <span class="red">1 de cada 3</span> habitantes de Manta termina mordido.</h2>
-          <div class="stats">
-            <article class="stat red-glow reveal"><b data-count="79178">0</b><span>mordidos sin hacer nada</span></article>
-            <article class="stat yellow-glow reveal"><b data-count="71222">0</b><span>mordidos actuando al azar<br>con los mismos recursos</span></article>
-            <article class="stat green-glow reveal"><b data-count="767">0</b><span>mordidos con la estrategia<br>del Comité</span></article>
-          </div>
-          <p class="source">Promedio de 200 simulaciones, escenario base, semilla 2026, 258.697 habitantes urbanos. Reproducible: misma semilla, mismo resultado. Detalle en <code>docs/resultados.md</code>.</p>
-        </div>
+    <section class="section">
+      <p class="kicker">Los números</p>
+      <h2>200 simulaciones del mismo brote, con tres decisiones distintas.</h2>
+      <div class="stats">
+        <article class="stat red-glow"><b data-count="79178">0</b><span>mordidos sin hacer nada</span></article>
+        <article class="stat yellow-glow"><b data-count="71222">0</b><span>con los mismos recursos repartidos al azar</span></article>
+        <article class="stat green-glow"><b data-count="767">0</b><span>con el plan del Comité</span></article>
       </div>
+      <p class="source">Escenario base, semilla 2026, 258.697 habitantes urbanos (INEC, Censo 2022). Reproducible: misma semilla, mismo resultado. Detalle en <code>docs/resultados.md</code>.</p>
     </section>
 
-    <section id="como" class="scene" style="--img: url(img/escenas/mando.jpg)">
-      <div class="scene-sticky"><div class="scene-bg"></div><div class="scene-shade"></div></div>
-      <div class="scene-content">
-        <div class="glass reveal">
-          <p class="kicker">02 · Cómo decide el Comité</p>
-          <h2 class="words">Qué hacer, dónde y cuándo. Cada día, solo con lo que se puede ver.</h2>
-        </div>
-        <ol class="steps">
-          <li class="glass reveal"><i>📡</i><h3>Detectar</h3><p>Solo ve los casos reportados. Los mordidos sin síntomas son invisibles, como en la vida real.</p></li>
-          <li class="glass reveal"><i>🏠</i><h3>Aislar</h3><p>Cuarentena de 7 días al hogar de cada caso reportado, con apoyo de comida e ingresos.</p></li>
-          <li class="glass reveal"><i>💉</i><h3>Vacunar</h3><p>Primero a quien convive, estudia, trabaja o viaja con casos y tiene más contactos. Nunca a un caso conocido.</p></li>
-          <li class="glass reveal"><i>🔒</i><h3>Cerrar y fumigar</h3><p>Mercados y colegios por parroquia solo cuando se pasa el umbral. Brigadas de fumigación si la transmite un mosquito.</p></li>
-        </ol>
-        <p class="aside-note glass reveal">Probó <b>21 políticas</b> en simulaciones de entrenamiento y eligió la mejor con semillas distintas a las de la evaluación: no hay trampa.</p>
-      </div>
-    </section>
-
-    <section id="vecino" class="scene" style="--img: url(img/escenas/vecindario.jpg)">
-      <div class="scene-sticky"><div class="scene-bg"></div><div class="scene-shade"></div></div>
-      <div class="scene-content split">
-        <div class="glass reveal">
-          <p class="kicker">03 · Detrás de cada punto, una persona</p>
-          <h2 class="words">Toca a cualquiera y conoce su historia.</h2>
-          <p>Su casa, su bus, su colegio o su trabajo. Quién la mordió y dónde. La cadena de contagio hasta el paciente cero. Y por qué el Comité decidió vacunarla a ella primero.</p>
-          <a class="btn btn-green" href="index.html">🎲 Conoce a un vecino</a>
-        </div>
-        <div class="card-demo reveal" aria-hidden="true">
-          <div class="demo-head"><span class="plumbob"></span><span class="demo-avatar">🧒</span><div><b>Kevin, 17 años</b><small>estudia en el colegio · Tarqui</small></div></div>
-          <p class="demo-route">🏠 Casa → 🚌 Bus línea 30 → 🏫 Colegio → 🛒 Mercado</p>
-          <p class="fate n">Si nadie hace nada: 🔴 mordido el día 46 en su casa</p>
-          <p class="fate a">Al azar: 🔴 mordido el día 14 en el colegio</p>
-          <p class="fate c">Con el Comité: 💉 vacunado el día 15 · nunca lo mordieron</p>
-        </div>
-      </div>
-    </section>
-
-    <section id="prueba" class="section">
-      <p class="kicker">04 · 🎃 Brote sorpresa</p>
-      <h2 class="words">Lo pusimos a prueba contra todo lo que el jurado podría cambiar.</h2>
-      <p class="sub">Porcentaje de brotes que despegan en que la estrategia deja menos mordidos que actuar al azar con los mismos recursos.</p>
+    <section class="section">
+      <p class="kicker">Brote sorpresa</p>
+      <h2>Lo probamos contra todo lo que el jurado podría cambiar.</h2>
+      <p class="sub">Porcentaje de brotes en que el plan deja menos personas mordidas que repartir los mismos recursos al azar.</p>
       <div class="bars" id="bars"></div>
-      <p class="source">Cuando todo sale mal a la vez (doble contagio, la mitad de vacunas y una vacuna que cubre 30 %) gana el 67 %: lo documentamos como límite, no lo escondemos.</p>
+      <p class="source">Cuando todo sale mal a la vez (el doble de contagio, la mitad de vacunas y una vacuna que protege al 30 %) gana el 67 %. Lo documentamos como límite.</p>
     </section>
 
-    <section id="datos" class="scene" style="--img: url(img/escenas/fumigacion.jpg)">
-      <div class="scene-sticky"><div class="scene-bg"></div><div class="scene-shade"></div></div>
-      <div class="scene-content split">
-        <div class="glass reveal">
-          <p class="kicker">05 · Datos reales</p>
-          <h2 class="words">Calibrado con el dengue de Manabí 2024.</h2>
-          <p>El mismo motor, sin intervenciones, reproduce la curva de los <b>10.450 casos</b> reportados por el Ministerio de Salud Pública: <b>R² = 0,87</b>. Con una plaga de mosquito, el Comité decide solo cuándo y dónde enviar <b>brigadas de fumigación</b>.</p>
-          <p class="source">Fuente: MSP, Gaceta de enfermedades vectoriales SE 52-2024.</p>
-        </div>
-        <svg id="calib" class="reveal" viewBox="0 0 520 220" role="img" aria-label="Casos semanales de dengue en Manabí 2024 y curva del modelo"></svg>
+    <section class="section split">
+      <div>
+        <p class="kicker">Más allá de los zombis</p>
+        <h2>El mismo motor, para un brote real.</h2>
+        <p>La ciudad y la enfermedad son datos. El simulador trae <b>Guayaquil</b> con su mapa real y el escenario <b>El Niño 2026</b>: lluvias y calor multiplican los mosquitos y el dengue se dispara en una ciudad de 2,6 millones. Para Manabí, el contagio del dengue está <b>calibrado con los 10.450 casos reales de 2024</b> del Ministerio de Salud Pública (R² = 0,87).</p>
+        <a class="btn btn-green" href="index.html">Probar El Niño en Guayaquil →</a>
       </div>
+      <svg id="calib" viewBox="0 0 520 220" role="img" aria-label="Casos semanales de dengue en Manabí 2024 y curva del modelo"></svg>
     </section>
 
-    <section id="aws" class="section">
-      <p class="kicker">06 · Infraestructura</p>
-      <h2 class="words">Corre en AWS, sin servidores y dentro de la capa gratuita.</h2>
+    <section class="section">
+      <p class="kicker">Infraestructura</p>
+      <h2>Corre en AWS, sin servidores y dentro de la capa gratuita.</h2>
       <div class="flow">
-        <div class="node reveal"><i>👤</i><b>Alcalde</b><small>navegador o celular</small></div><span class="arrow">→</span>
-        <div class="node reveal"><i>🌐</i><b>CloudFront + S3</b><small>la web, con HTTPS</small></div><span class="arrow">→</span>
-        <div class="node reveal"><i>🚪</i><b>API Gateway</b><small>con límite de uso</small></div><span class="arrow">→</span>
-        <div class="node reveal"><i>λ</i><b>Lambda ×8</b><small>Monte Carlo en paralelo</small></div><span class="arrow">→</span>
-        <div class="node reveal"><i>🗄️</i><b>S3 caché</b><small>misma semilla, mismo resultado</small></div>
+        <div class="node"><b>CloudFront + S3</b><small>la web, con HTTPS</small></div><span class="arrow">→</span>
+        <div class="node"><b>API Gateway</b><small>con límite de uso</small></div><span class="arrow">→</span>
+        <div class="node"><b>Lambda ×8</b><small>simulaciones en paralelo</small></div><span class="arrow">→</span>
+        <div class="node"><b>S3</b><small>caché: misma semilla, mismo resultado</small></div>
       </div>
-      <p class="aside-note">Infraestructura como código (SAM), escaneada con <b>Checkov</b> en cada cambio, y un <b>AWS Budget con alerta</b> desde el primer día.</p>
+      <p class="source">Infraestructura como código (SAM), escaneada con Checkov en cada cambio, y un AWS Budget con alerta desde el primer día.</p>
     </section>
 
-    <section class="scene final" style="--img: url(img/escenas/amanecer.jpg)">
-      <div class="scene-sticky"><div class="scene-bg"></div><div class="scene-shade"></div></div>
-      <div class="scene-content">
-        <div class="reveal">
-          <p class="kicker">Día 120</p>
-          <h2 class="glitch small" data-text="Amanece en Manta.">Amanece en Manta.</h2>
-          <p>Cambia el contagio, las vacunas o dónde empieza. El Comité vuelve a calcular la mejor estrategia en segundos.</p>
-          <a class="btn btn-orange big" href="index.html">Entrar al Centro de Mando →</a>
-        </div>
-      </div>
+    <section class="section final">
+      <h2>¿Qué harías tú?</h2>
+      <p>Cambia el contagio, las vacunas o dónde empieza. El Comité calcula el mejor plan en segundos.</p>
+      <a class="btn btn-orange big" href="index.html">Abrir el simulador →</a>
     </section>
   </main>
 
   <footer class="foot">
     <p>Comité de Contención · SpookyThon 2026 · Track B · ULEAM, Manta</p>
-    <p class="attrib">Imagen satelital © Esri, Maxar, Earthstar Geographics · Límites y densidad © colaboradores de <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Datos de dengue: Ministerio de Salud Pública del Ecuador · Ilustraciones de escenas generadas con IA (Higgsfield).</p>
+    <p class="attrib">Película e ilustraciones generadas con IA (Higgsfield) a partir de un guion propio · Imagen satelital © Esri, Maxar, Earthstar Geographics · Límites y densidad © colaboradores de <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Datos de dengue: Ministerio de Salud Pública del Ecuador.</p>
   </footer>
 </body>
 </html>

@@ -194,3 +194,21 @@ test('Modo Vecino: grabar historias no cambia el brote y cada contagio viene de 
     assert.ok(linked > 0.9 * (traced.infected - cfg.initialInfected), 'casi todos los contagios tienen origen');
   }
 });
+
+test('otra ciudad: Guayaquil usa su población, sus zonas y reparte los hogares según el censo', async () => {
+  const { CITIES, cityLayout } = await import('../src/engine/index.js');
+  const cfg = makeConfig({ city: 'guayaquil', agents: 5000 });
+  assert.equal(cfg.realPopulation, 2650288);
+  assert.equal(cfg.start, 'mercado:Centro');
+  assert.throws(() => makeConfig({ city: 'guayaquil', start: 'mercado:Los Esteros' }), /inicio/);
+  const pop = buildPopulation(cfg);
+  const zones = CITIES.guayaquil.zones;
+  const share = CITIES.guayaquil.zoneShare;
+  const total = share.reduce((a, b) => a + b, 0);
+  const tarqui = pop.parroquia.filter((p) => p === zones.indexOf('Tarqui')).length / pop.N;
+  assert.ok(Math.abs(tarqui - share[0] / total) < 0.05, `Tarqui ${tarqui}`);
+  const layout = cityLayout(pop, cfg.seed);
+  assert.ok(layout.x.every((v) => v >= 0 && v <= 1) && layout.y.every((v) => v >= 0 && v <= 1));
+  const res = simulateRun(pop, cfg, 'adaptativa', 3);
+  assert.ok(res.closures.every((c) => zones.includes(c.parroquia)));
+});
