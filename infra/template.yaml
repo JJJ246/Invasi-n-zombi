@@ -1,0 +1,267 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Comité de Contención (SpookyThon 2026, Track B). Web estática en S3 + CloudFront,
+  API HTTP + Lambda para el Monte Carlo, resultados en S3 y alerta de presupuesto.
+
+Parameters:
+  AlertEmail:
+    Type: String
+    Description: Correo que recibe la alerta del AWS Budget.
+  MonthlyBudgetUsd:
+    Type: Number
+    Default: 5
+    Description: Presupuesto mensual en USD para la alerta.
+
+Globals:
+  Function:
+    Runtime: nodejs22.x
+    Architectures: [arm64]
+    MemorySize: 1769 # 1 vCPU completa: el Monte Carlo es cálculo puro
+    CodeUri: ../src/
+    LoggingConfig:
+      LogFormat: JSON
+
+Resources:
+  # ---------- Almacenamiento ----------
+  WebBucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: Web estática de un hackathon; el acceso queda registrado en CloudFront y no justifica otro bucket de logs.
+          - id: CKV_AWS_21
+            comment: Se vuelve a generar en cada despliegue desde el repositorio; el versionado no aporta.
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      OwnershipControls:
+        Rules: [{ ObjectOwnership: BucketOwnerEnforced }]
+
+  WebBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref WebBucket
+      PolicyDocument:
+        Statement:
+          - Sid: SoloCloudFront
+            Effect: Allow
+            Principal: { Service: cloudfront.amazonaws.com }
+            Action: s3:GetObject
+            Resource: !Sub '${WebBucket.Arn}/*'
+            Condition:
+              StringEquals:
+                AWS:SourceArn: !Sub 'arn:aws:cloudfront::${AWS::AccountId}:distribution/${Distribution}'
+          - Sid: SoloHttps
+            Effect: Deny
+            Principal: '*'
+            Action: 's3:*'
+            Resource: [!GetAtt WebBucket.Arn, !Sub '${WebBucket.Arn}/*']
+            Condition: { Bool: { aws:SecureTransport: 'false' } }
+
+  ResultsBucket:
+    Type: AWS::S3::Bucket
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_18
+            comment: Caché de resultados reproducibles; se puede regenerar con la misma semilla.
+          - id: CKV_AWS_21
+            comment: Caché reproducible; el versionado solo aumentaría el costo.
+    Properties:
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 }
+      LifecycleConfiguration:
+        Rules:
+          - Id: BorrarCacheVieja
+            Status: Enabled
+            ExpirationInDays: 30
+
+  # ---------- Cómputo ----------
+  BatchFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: Invocación síncrona desde la Lambda coordinadora; los errores vuelven en la respuesta.
+          - id: CKV_AWS_117
+            comment: No accede a recursos dentro de una VPC.
+          - id: CKV_AWS_173
+            comment: No usa variables de entorno con secretos.
+          - id: CKV_AWS_115
+            comment: Cuentas nuevas tienen límite de 10 ejecuciones simultáneas y no permiten reservar; el límite de la API protege el costo.
+    Properties:
+      Description: Corre un lote de simulaciones Monte Carlo (sin acceso público).
+      Handler: lambda/batch.handler
+      Timeout: 60
+      # Sin permisos extra: solo escribe sus logs.
+
+  BatchLogs:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_158
+            comment: CloudWatch ya cifra los logs por defecto; una clave KMS propia cuesta USD 1/mes y no guardamos datos personales.
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${BatchFunction}'
+      RetentionInDays: 7
+
+  SimulateFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_116
+            comment: Invocada de forma síncrona por API Gateway; los errores vuelven al cliente.
+          - id: CKV_AWS_117
+            comment: No accede a recursos dentro de una VPC.
+          - id: CKV_AWS_173
+            comment: Las variables de entorno solo contienen nombres de recursos, no secretos.
+          - id: CKV_AWS_115
+            comment: Cuentas nuevas tienen límite de 10 ejecuciones simultáneas y no permiten reservar; el límite de la API protege el costo.
+    Properties:
+      Description: POST /simulate — optimiza la política y coordina el Monte Carlo.
+      Handler: lambda/simulate.handler
+      Timeout: 29
+      Environment:
+        Variables:
+          WORKER_FUNCTION: !Ref BatchFunction
+          RESULTS_BUCKET: !Ref ResultsBucket
+      Policies:
+        # Mínimo privilegio: solo leer/escribir resultados y llamar a la Lambda de lotes.
+        - Statement:
+            - Effect: Allow
+              Action: [s3:GetObject, s3:PutObject]
+              Resource: !Sub '${ResultsBucket.Arn}/results/*'
+            - Effect: Allow
+              Action: lambda:InvokeFunction
+              Resource: !GetAtt BatchFunction.Arn
+      Events:
+        Simulate:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref Api
+            Method: POST
+            Path: /simulate
+
+  SimulateLogs:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_158
+            comment: CloudWatch ya cifra los logs por defecto; una clave KMS propia cuesta USD 1/mes y no guardamos datos personales.
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/${SimulateFunction}'
+      RetentionInDays: 7
+
+  Api:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      CorsConfiguration:
+        AllowOrigins: [!Sub 'https://${Distribution.DomainName}', 'http://localhost:8765', 'http://127.0.0.1:8765']
+        AllowMethods: [POST, OPTIONS]
+        AllowHeaders: [content-type]
+      DefaultRouteSettings:
+        # Límite de peticiones: protege la factura si alguien abusa de la API pública.
+        ThrottlingBurstLimit: 10
+        ThrottlingRateLimit: 5
+      AccessLogSettings:
+        DestinationArn: !GetAtt ApiLogs.Arn
+        Format: '{"requestId":"$context.requestId","ip":"$context.identity.sourceIp","ruta":"$context.routeKey","estado":"$context.status","ms":"$context.responseLatency"}'
+
+  ApiLogs:
+    Type: AWS::Logs::LogGroup
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_158
+            comment: CloudWatch ya cifra los logs por defecto; una clave KMS propia cuesta USD 1/mes y no guardamos datos personales.
+    Properties:
+      RetentionInDays: 7
+
+  # ---------- Distribución web ----------
+  OriginAccessControl:
+    Type: AWS::CloudFront::OriginAccessControl
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${AWS::StackName}-oac'
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  Distribution:
+    Type: AWS::CloudFront::Distribution
+    Metadata:
+      checkov:
+        skip:
+          - id: CKV_AWS_68
+            comment: Sin WAF para mantener el costo casi en cero; la API tiene límite de peticiones.
+          - id: CKV_AWS_86
+            comment: Sin logs de acceso para no generar costo de almacenamiento.
+          - id: CKV_AWS_174
+            comment: Usa el certificado por defecto de CloudFront (TLSv1 lo fija AWS en dominios *.cloudfront.net).
+          - id: CKV_AWS_310
+            comment: Un solo origen; no hay origen de respaldo.
+          - id: CKV_AWS_374
+            comment: Abierto a todos los países a propósito; es una herramienta pública.
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        Comment: Comité de Contención - La Plaga Zombie
+        DefaultRootObject: index.html
+        HttpVersion: http2and3
+        PriceClass: PriceClass_100
+        Origins:
+          - Id: web
+            DomainName: !GetAtt WebBucket.RegionalDomainName
+            OriginAccessControlId: !GetAtt OriginAccessControl.Id
+            S3OriginConfig: { OriginAccessIdentity: '' }
+        DefaultCacheBehavior:
+          TargetOriginId: web
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          CachePolicyId: 658327ea-f89d-4fab-a63d-7e88639e58f6 # CachingOptimized (administrada por AWS)
+          ResponseHeadersPolicyId: 67f7725c-6f97-4210-82d7-5512b31e9d03 # SecurityHeadersPolicy (administrada por AWS)
+
+  # ---------- Control de costos ----------
+  Budget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub '${AWS::StackName}-mensual'
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: !Ref MonthlyBudgetUsd, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 50, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+        - Notification: { NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100, ThresholdType: PERCENTAGE }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+
+Outputs:
+  WebUrl:
+    Description: URL pública de la aplicación
+    Value: !Sub 'https://${Distribution.DomainName}'
+  ApiUrl:
+    Description: URL de la API
+    Value: !Sub 'https://${Api}.execute-api.${AWS::Region}.amazonaws.com'
+  WebBucketName:
+    Value: !Ref WebBucket
+  DistributionId:
+    Value: !Ref Distribution
