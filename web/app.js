@@ -1,6 +1,7 @@
 import { DEFAULTS } from './engine/config.js';
 import { headline, mayorReport } from './engine/report.js';
 import { CityPlayer } from './city.js';
+import { renderVecino, interestingPeople } from './vecino.js';
 import { CALIBRATION } from './engine/calibration.js';
 import { DENGUE_MANABI_2024, DENGUE_PERIODS } from './engine/dengue-manabi-2024.js';
 
@@ -33,6 +34,31 @@ let chart = null;
 let busy = false;
 let previous = null; // último resultado, para mostrar qué cambió tras un Brote Sorpresa
 const player = new CityPlayer(document.querySelector('.city'));
+
+// Modo Vecino: la ficha de la persona elegida se actualiza con el día de la animación.
+const vecino = $('vecino');
+let neighbours = [];
+let nextNeighbour = 0;
+player.onSelect = (i) => {
+  renderVecino(vecino, player.trace, i, player.day);
+  vecino.hidden = false;
+};
+player.onDay = (day) => {
+  if (!vecino.hidden && player.selected >= 0) renderVecino(vecino, player.trace, player.selected, day);
+};
+vecino.addEventListener('click', (e) => {
+  if (e.target.closest('.close')) {
+    vecino.hidden = true;
+    player.selected = -1;
+    player.show(player.day);
+  }
+  const link = e.target.closest('[data-person]');
+  if (link) player.select(Number(link.dataset.person));
+});
+$('meetBtn').addEventListener('click', () => {
+  if (!neighbours.length) return;
+  player.select(neighbours[nextNeighbour++ % neighbours.length]);
+});
 
 function setForm(values) {
   for (const name of FIELDS) form.elements[name].value = values[name];
@@ -112,7 +138,12 @@ function loadCity(s) {
   const worker = new Worker('./worker.js', { type: 'module' });
   worker.onmessage = ({ data }) => {
     worker.terminate();
-    if (data.type === 'trace') player.load(data.trace, s.config, s.runs);
+    if (data.type !== 'trace') return;
+    player.load(data.trace, s.config, s.runs);
+    vecino.hidden = true;
+    neighbours = interestingPeople(data.trace);
+    nextNeighbour = 0;
+    $('meetBtn').disabled = neighbours.length === 0;
   };
   worker.postMessage({ type: 'trace', config: s.config, policy: s.policy, run: s.representativeRun });
 }

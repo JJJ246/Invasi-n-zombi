@@ -150,6 +150,36 @@ export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy 
   let hubPointer = 0;
 
   const frames = trace ? new Uint8Array(N * (D + 1)) : null;
+  // Historias del "Modo Vecino" (solo al grabar la animación): quién mordió a quién, dónde y cuándo,
+  // y por qué se vacunó a cada persona. Usa su propio generador: no altera el brote ni los resultados.
+  const story = trace
+    ? {
+        infectedBy: new Int32Array(N).fill(-1), // -1: nadie (sano o paciente cero)
+        infectedLayer: new Int8Array(N).fill(-1),
+        infectedDay: new Int16Array(N).fill(-1),
+        vaccinatedDay: new Int16Array(N).fill(-1),
+        vaxReason: new Int8Array(N), // 1: cerca de casos (anillo/mixto) · 2: de los más conectados de la ciudad
+        vaxLayer: new Int8Array(N).fill(-1), // lugar donde más riesgo tenía al vacunarse
+        detectedDay: new Int16Array(N).fill(-1),
+      }
+    : null;
+  const storyRng = trace ? new Rng(hashSeed(runSeed, 'historias', strategy)) : null;
+  if (story) for (const i of initial) story.infectedDay[i] = 0;
+  // Riesgo de i en cada capa (misma fórmula que la presión de contagio del paso 4).
+  const layerRisk = (i, d, out) => {
+    out[HOME] = placeZombies[HOME][home[i]];
+    for (let l = 1; l < L; l++) {
+      out[l] = 0;
+      const place = pop.layerPlace[l][i];
+      if (place < 0 || inQuarantine(i, d)) continue;
+      const z = placeZombies[l][place];
+      if (z === 0 || isClosed(l, pop.placeParroquia[l][place], d)) continue;
+      out[l] = (pop.attend[l] * pop.contacts[l] * z) / Math.max(1, pop.placeSize[l][place] - 1);
+    }
+    return out;
+  };
+  const riskBuf = new Float64Array(LAYERS.length);
+  let zombiesToday = [];
   const record = (d) => {
     if (frames) {
       const base = d * N;
@@ -218,6 +248,7 @@ export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy 
   const vaccinate = (i, d) => {
     if (detected[i]) wastedVisible++;
     vaccinated[i] = 1;
+    if (story) story.vaccinatedDay[i] = d;
     dosesUsed++;
     dosesByDay[d]++;
     dosesByParroquia[pop.parroquia[i]]++;
@@ -247,7 +278,10 @@ export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy 
     zombiesByParroquia.fill(0);
     for (let i = 0; i < N; i++) {
       if (state[i] !== I) continue;
-      if (!detected[i] && detectRng.next() < cfg.detectionProb) detected[i] = 1;
+      if (!detected[i] && detectRng.next() < cfg.detectionProb) {
+        detected[i] = 1;
+        if (story) story.detectedDay[i] = d;
+      }
       if (detected[i]) zombiesByParroquia[pop.parroquia[i]]++;
     }
     const responding = d >= cfg.responseStartDay;
@@ -287,8 +321,10 @@ export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy 
 
     // 4. Presión de contagio: zombis activos en cada lugar, ponderados por asistencia.
     for (let l = 0; l < L; l++) placeZombies[l].fill(0);
+    if (story) zombiesToday = [];
     for (let i = 0; i < N; i++) {
       if (state[i] !== I) continue;
+      if (story) zombiesToday.push(i);
       placeZombies[HOME][home[i]] += 1;
       if (inQuarantine(i, d)) continue;
       for (let l = 1; l < L; l++) {
@@ -344,13 +380,21 @@ export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy 
         }
       }
       const picked = topK(candidates, count, score, k);
-      for (const i of picked) vaccinate(i, d);
+      for (const i of picked) {
+        vaccinate(i, d);
+        if (story) {
+          story.vaxReason[i] = 1;
+          layerRisk(i, d, riskBuf);
+          story.vaxLayer[i] = riskBuf.indexOf(Math.max(...riskBuf));
+        }
+      }
       // Sin focos cercanos (o en modo "conectados"): se protege a los más conectados de la ciudad.
       let remaining = k - picked.length;
       while (remaining > 0 && hubPointer < N) {
         const i = pop.hubOrder[hubPointer++];
         if (eligible(i)) {
           vaccinate(i, d);
+          if (story) story.vaxReason[i] = 2;
           remaining--;
         }
       }
@@ -367,6 +411,22 @@ export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy 
         }
       }
     }
+
+    // Para el Modo Vecino: elige el lugar del contagio en proporción a su riesgo y, dentro de ese
+    // lugar, a uno de los zombis presentes ese día.
+    const attribute = (i, d) => {
+      layerRisk(i, d, riskBuf);
+      let total = 0;
+      for (let l = 0; l < L; l++) total += riskBuf[l];
+      let u = storyRng.next() * total;
+      let layer = 0;
+      while (layer < L - 1 && u >= riskBuf[layer]) u -= riskBuf[layer++];
+      const place = pop.layerPlace[layer][i];
+      const present = zombiesToday.filter((z) => pop.layerPlace[layer][z] === place && z !== i && (layer === HOME || !inQuarantine(z, d)));
+      story.infectedLayer[i] = layer;
+      story.infectedDay[i] = d + 1;
+      story.infectedBy[i] = present.length ? present[storyRng.int(present.length)] : -1;
+    };
 
     // 6. Progresión: mordido -> zombi -> exorcizado.
     for (let i = 0; i < N; i++) {
@@ -387,6 +447,7 @@ export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy 
         state[i] = E;
         timer[i] = epi.between(cfg.latentMin, cfg.latentMax);
         infectedTotal++;
+        if (story) attribute(i, d);
       }
     }
 
@@ -425,5 +486,6 @@ export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy 
     daily,
     cumulative,
     frames,
+    story,
   };
 }

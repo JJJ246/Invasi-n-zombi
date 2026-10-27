@@ -173,3 +173,24 @@ test('con mosquito, el optimizador también prueba políticas con fumigación', 
   assert.ok(withVector.length > 21);
   assert.ok(withVector.some((p) => p.fumigation));
 });
+
+test('Modo Vecino: grabar historias no cambia el brote y cada contagio viene de un zombi anterior', () => {
+  const cfg = makeConfig({ ...SMALL, r0: 2.5 });
+  const pop = buildPopulation(cfg);
+  for (const strategy of ['nada', 'adaptativa']) {
+    const plain = simulateRun(pop, cfg, strategy, 7);
+    const traced = simulateRun(pop, cfg, strategy, 7, null, undefined, true);
+    assert.equal(traced.infected, plain.infected);
+    assert.deepEqual(Array.from(traced.cumulative), Array.from(plain.cumulative));
+    const s = traced.story;
+    let linked = 0;
+    for (let i = 0; i < pop.N; i++) {
+      const by = s.infectedBy[i];
+      if (by < 0) continue;
+      linked++;
+      assert.ok(s.infectedDay[by] >= 0 && s.infectedDay[by] < s.infectedDay[i], 'el que muerde se contagió antes');
+      if (s.infectedLayer[i] === 0) assert.equal(pop.layerPlace[0][by], pop.layerPlace[0][i], 'contagio en casa: mismo hogar');
+    }
+    assert.ok(linked > 0.9 * (traced.infected - cfg.initialInfected), 'casi todos los contagios tienen origen');
+  }
+});

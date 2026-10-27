@@ -126,9 +126,12 @@
               <option value="10" selected>Normal</option>
               <option value="25">Rápido</option>
             </select>
+            <button type="button" id="meetBtn" class="meet" disabled title="Alguien que se salva gracias al Comité">🎲 Conoce a un vecino</button>
             <button type="button" id="fullBtn" title="Pantalla completa">⛶ Pantalla completa</button>
           </div>
         </div>
+        <p class="hint tap">👆 Toca cualquier punto del mapa: detrás de cada uno hay una persona con su historia.</p>
+        <div class="city-body">
         <div class="city-grid">
           <figure class="panel-city" data-strategy="nada">
             <figcaption><span class="dot" style="--c: var(--zombie)"></span>No hacer nada</figcaption>
@@ -145,6 +148,8 @@
             <canvas></canvas>
             <div class="city-stats"></div>
           </figure>
+        </div>
+        <aside id="vecino" class="vecino" hidden aria-live="polite"></aside>
         </div>
         <div class="legend">
           <span><i style="--c:#3f7d58"></i>Sano</span>

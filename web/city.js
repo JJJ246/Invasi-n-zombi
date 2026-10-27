@@ -36,6 +36,10 @@ export class CityPlayer {
     this.trace = null;
     this.day = 0;
     this.playing = false;
+    this.selected = -1; // Modo Vecino: persona elegida (se sigue en los tres mapas)
+    this.onSelect = null;
+    this.onDay = null;
+    for (const p of this.panels) p.canvas.addEventListener('click', (e) => this.pickAt(p, e));
 
     this.playBtn.addEventListener('click', () => (this.playing ? this.pause() : this.play()));
     // Pantalla completa: para proyectar la ciudad en el pitch.
@@ -53,6 +57,7 @@ export class CityPlayer {
   load(trace, cfg, totalRuns) {
     this.pause();
     this.trace = trace;
+    this.selected = -1;
     // Mapa satelital real de Manta: se carga una vez y, cuando llega, se redibuja el fondo.
     if (!this.mapImage) {
       this.mapImage = new Image();
@@ -139,6 +144,28 @@ export class CityPlayer {
     this.dayLabel.textContent = `Día ${this.day}`;
     for (const p of this.panels) this.drawPanel(p);
     this.describeDay();
+    this.onDay?.(this.day);
+  }
+
+  // Toca un punto: elige a la persona más cercana al clic.
+  pickAt(p, e) {
+    if (!this.trace) return;
+    const rect = p.canvas.getBoundingClientRect();
+    const x = ((e.clientX - rect.left) / rect.width) * p.canvas.width;
+    const y = ((e.clientY - rect.top) / rect.height) * p.canvas.height;
+    let best = -1;
+    let bestD = (14 * p.dpr) ** 2;
+    for (let i = 0; i < this.trace.N; i++) {
+      const d = (p.px[i] - x) ** 2 + (p.py[i] - y) ** 2;
+      if (d < bestD) [best, bestD] = [i, d];
+    }
+    if (best >= 0) this.select(best);
+  }
+
+  select(i) {
+    this.selected = i;
+    this.show(this.day);
+    this.onSelect?.(i);
   }
 
   drawPanel(p) {
@@ -186,9 +213,40 @@ export class CityPlayer {
       label('🦟 Fumigando', r.x * w, r.y * h - lineH, nameSize * 0.9, '#2dd4bf');
     }
     ctx.textAlign = 'start';
+    if (this.selected >= 0) this.drawSelected(p, run, ctx);
     p.stats.innerHTML =
       `<span>Zombis ahora: <b class="z">${fmt(run.I[this.day] * t.scale)}</b></span>` +
       `<span>Mordidos en total: <b>${fmt(run.cumulative[this.day] * t.scale)}</b></span>`;
+  }
+
+  // Anillo sobre la persona elegida y, si ya la mordieron en esta realidad, línea hacia quien la mordió.
+  drawSelected(p, run, ctx) {
+    const i = this.selected;
+    const s = run.story;
+    const r = 9 * p.dpr;
+    const by = s?.infectedBy[i] ?? -1;
+    if (by >= 0 && s.infectedDay[i] <= this.day) {
+      ctx.strokeStyle = '#ff3b3b';
+      ctx.lineWidth = 2 * p.dpr;
+      ctx.setLineDash([5 * p.dpr, 4 * p.dpr]);
+      ctx.beginPath();
+      ctx.moveTo(p.px[by], p.py[by]);
+      ctx.lineTo(p.px[i], p.py[i]);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(p.px[by], p.py[by], r * 0.7, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+    const pulse = 1 + 0.25 * Math.sin(performance.now() / 180);
+    ctx.lineWidth = 2.5 * p.dpr;
+    ctx.strokeStyle = '#ffffff';
+    ctx.shadowColor = '#ffffff';
+    ctx.shadowBlur = 8 * p.dpr;
+    ctx.beginPath();
+    ctx.arc(p.px[i], p.py[i], r * pulse, 0, 2 * Math.PI);
+    ctx.stroke();
+    ctx.shadowBlur = 0;
   }
 
   describeDay() {

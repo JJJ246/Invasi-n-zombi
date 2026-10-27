@@ -238,8 +238,21 @@ export function traceRun(cfgInput, policy, run) {
     I: Array.from(r.daily.I),
     cumulative: Array.from(r.cumulative),
     infected: r.infected,
+    story: r.story,
   });
-  return { run, seed, N: cfg.agents, days: cfg.days, scale: scaleOf(cfg), layout: cityLayout(pop, cfg.seed), nada: pick(none), azar: pick(random), adaptativa: pick(adaptive) };
+  // Datos de cada persona para el Modo Vecino (rutina y contactos).
+  const home = pop.layerPlace[0];
+  const people = {
+    role: pop.role,
+    parroquia: pop.parroquia,
+    home,
+    homeSize: Int16Array.from(home, (h) => pop.placeSize[0][h]),
+    colegio: pop.layerPlace[1],
+    trabajo: pop.layerPlace[2],
+    bus: pop.layerPlace[3],
+    connectivity: Float32Array.from(pop.connectivity),
+  };
+  return { run, seed, N: cfg.agents, days: cfg.days, scale: scaleOf(cfg), layout: cityLayout(pop, cfg.seed), people, nada: pick(none), azar: pick(random), adaptativa: pick(adaptive) };
 }
 
 // Atajo: optimiza la política, corre la evaluación y resume.

@@ -164,3 +164,45 @@ button.wide { width: 100%; margin-top: 0.4rem; border-color: #2dd4bf; }
 .verdict .ko { border-color: #f8717180; }
 
 a { color: var(--accent); }
+
+/* ---------- Modo Vecino ---------- */
+.hint.tap { margin: 0.5rem 0 0; }
+button.meet { border-color: var(--sano); }
+.city-body { display: grid; grid-template-columns: 1fr; gap: 0.8rem; align-items: start; }
+.city-body:has(.vecino:not([hidden])) { grid-template-columns: minmax(0, 1fr) 340px; }
+@media (max-width: 1000px) { .city-body:has(.vecino:not([hidden])) { grid-template-columns: 1fr; } }
+.panel-city canvas { cursor: pointer; }
+.vecino { position: relative; margin-top: 0.8rem; background: linear-gradient(180deg, #1c1638, #120e24); border: 1px solid #4ade8066; border-radius: 12px; padding: 0.9rem 1rem; font-size: 0.88rem; max-height: 78vh; overflow: auto; animation: vecino-in 0.25s ease-out; }
+@keyframes vecino-in { from { opacity: 0; transform: translateY(6px); } }
+.vecino .close { position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.15rem 0.5rem; }
+.vecino h3 { margin: 0; font-size: 1.1rem; }
+.vecino h3 small { color: var(--muted); font-weight: 400; }
+.vecino h4 { margin: 0.9rem 0 0.35rem; font-size: 0.92rem; color: var(--accent); }
+.vecino h4 small { color: var(--muted); font-weight: 400; }
+.vecino p { margin: 0.3rem 0; }
+.vecino .muted { color: var(--muted); }
+.vecino-head { display: flex; gap: 0.8rem; align-items: flex-start; padding-top: 1.2rem; }
+.avatar { position: relative; font-size: 2.6rem; line-height: 1; background: #0a0716; border: 1px solid var(--line); border-radius: 12px; padding: 0.35rem 0.45rem; }
+/* El rombo de los Sims: color = estado de la persona ese día con la estrategia del Comité. */
+.plumbob { position: absolute; left: 50%; top: -1.25rem; width: 0.85rem; height: 0.85rem; background: var(--c); transform: translateX(-50%) rotate(45deg); box-shadow: 0 0 10px var(--c), 0 0 2px #fff inset; animation: bob 1.6s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateX(-50%) translateY(-4px) rotate(45deg); } }
+.need { display: grid; grid-template-columns: auto 1fr auto; gap: 0.4rem; align-items: center; margin-top: 0.35rem; font-size: 0.78rem; color: var(--muted); }
+.need i { height: 7px; background: #0a0716; border-radius: 4px; overflow: hidden; }
+.need b { display: block; height: 100%; background: linear-gradient(90deg, #4ade80, #facc15, #ff3b3b); }
+.need em { font-style: normal; color: var(--text); }
+.routine { color: var(--muted); }
+.routine span { color: var(--accent); }
+.fates { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; }
+.fates li { background: #0a0716; border-left: 3px solid; border-radius: 6px; padding: 0.4rem 0.55rem; }
+.fates li.nada { border-color: #f87171; }
+.fates li.azar { border-color: #facc15; }
+.fates li.adaptativa { border-color: #4ade80; }
+.fate-label { display: block; font-size: 0.75rem; color: var(--muted); }
+.fate.z { color: #ffb4b4; }
+.fate.v { color: #5eead4; }
+.fate.s { color: #86efac; }
+.chain { margin: 0; padding-left: 1.3rem; display: grid; gap: 0.15rem; }
+.chain small { color: var(--muted); }
+button.link { background: none; border: 0; padding: 0; color: var(--text); text-decoration: underline dotted; cursor: pointer; font: inherit; }
+.city:fullscreen .city-body:has(.vecino:not([hidden])) { grid-template-columns: minmax(0, 1fr) 380px; }
+.city:fullscreen .vecino { font-size: 0.95rem; }
