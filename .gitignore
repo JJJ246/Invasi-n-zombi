@@ -1,0 +1,10 @@
+node_modules/
+dist/
+web/engine/
+.aws-sam/
+samconfig.toml
+.DS_Store
+._*
+.env
+*.pem
+.map-cache/

@@ -1,0 +1,23 @@
+{
+  "name": "plaga-zombie-manta",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Comité de Contención: simulador de la plaga zombie en Manta y optimizador de intervenciones con recursos limitados (SpookyThon 2026, Track B).",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "simulate": "node scripts/simulate.mjs",
+    "scenarios": "node scripts/scenarios.mjs",
+    "build:web": "node scripts/build-web.mjs",
+    "dev": "node scripts/build-web.mjs && cd dist && python3 -m http.server 8765",
+    "deploy": "./scripts/deploy.sh"
+  },
+  "devDependencies": {
+    "@aws-sdk/client-lambda": "^3.1157.0",
+    "@aws-sdk/client-s3": "^3.1157.0"
+  }
+}
