@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="640" viewBox="0 0 1100 640" font-family="Helvetica, Arial, sans-serif" font-size="14">
+  <title>Arquitectura del Comité de Contención</title>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#444"/>
+    </marker>
+    <style>
+      .box { fill: #fff; stroke: #444; stroke-width: 1.5; rx: 10; }
+      .pub { fill: #fff4e5; stroke: #e8780c; }
+      .priv { fill: #eef4ff; stroke: #3b6fd8; }
+      .aws { fill: #f4f4f4; stroke: #999; stroke-dasharray: 6 4; }
+      .t { font-weight: 700; }
+      .s { fill: #555; font-size: 12px; }
+      .l { stroke: #444; stroke-width: 1.6; fill: none; marker-end: url(#a); }
+      .lbl { fill: #333; font-size: 12px; }
+    </style>
+  </defs>
+
+  <rect width="1100" height="640" fill="#ffffff"/>
+  <text x="30" y="36" font-size="20" class="t">Comité de Contención — arquitectura en AWS (us-east-1)</text>
+  <text x="30" y="58" class="s">Naranja = público en Internet · Azul = privado (sin acceso público) · Todo serverless: costo casi cero cuando no se usa</text>
+
+  <!-- Usuario -->
+  <rect x="30" y="250" width="170" height="120" class="box"/>
+  <text x="115" y="285" text-anchor="middle" class="t">Navegador</text>
+  <text x="115" y="307" text-anchor="middle" class="s">Interfaz + motor en</text>
+  <text x="115" y="323" text-anchor="middle" class="s">Web Worker (mismo</text>
+  <text x="115" y="339" text-anchor="middle" class="s">código que Lambda)</text>
+
+  <!-- Nube AWS -->
+  <rect x="240" y="80" width="840" height="530" class="box aws"/>
+  <text x="258" y="104" class="t">Cuenta AWS (desplegada con AWS SAM: infra/template.yaml)</text>
+
+  <rect x="270" y="130" width="200" height="80" class="box pub"/>
+  <text x="370" y="162" text-anchor="middle" class="t">Amazon CloudFront</text>
+  <text x="370" y="182" text-anchor="middle" class="s">HTTPS + cabeceras de seguridad</text>
+
+  <rect x="560" y="130" width="200" height="80" class="box priv"/>
+  <text x="660" y="162" text-anchor="middle" class="t">S3 · web</text>
+  <text x="660" y="182" text-anchor="middle" class="s">privado, solo vía CloudFront (OAC)</text>
+
+  <rect x="270" y="320" width="200" height="90" class="box pub"/>
+  <text x="370" y="352" text-anchor="middle" class="t">API Gateway (HTTP)</text>
+  <text x="370" y="372" text-anchor="middle" class="s">POST /simulate · CORS</text>
+  <text x="370" y="390" text-anchor="middle" class="s">límite 5 pet./s (protege el costo)</text>
+
+  <rect x="560" y="320" width="200" height="90" class="box priv"/>
+  <text x="660" y="350" text-anchor="middle" class="t">Lambda "simulate"</text>
+  <text x="660" y="370" text-anchor="middle" class="s">valida · optimiza la política</text>
+  <text x="660" y="388" text-anchor="middle" class="s">reparte y resume el Monte Carlo</text>
+
+  <rect x="850" y="300" width="200" height="130" class="box priv"/>
+  <rect x="842" y="308" width="200" height="130" class="box priv" opacity="0.5"/>
+  <rect x="858" y="292" width="200" height="130" class="box priv"/>
+  <text x="958" y="335" text-anchor="middle" class="t">Lambda "batch" × 8</text>
+  <text x="958" y="357" text-anchor="middle" class="s">corridas en paralelo</text>
+  <text x="958" y="375" text-anchor="middle" class="s">(Node.js 22, arm64)</text>
+  <text x="958" y="393" text-anchor="middle" class="s">sin acceso público</text>
+
+  <rect x="560" y="480" width="200" height="80" class="box priv"/>
+  <text x="660" y="512" text-anchor="middle" class="t">S3 · resultados</text>
+  <text x="660" y="532" text-anchor="middle" class="s">caché por huella de config (30 días)</text>
+
+  <rect x="850" y="480" width="200" height="80" class="box priv"/>
+  <text x="950" y="512" text-anchor="middle" class="t">CloudWatch Logs</text>
+  <text x="950" y="532" text-anchor="middle" class="s">retención 7 días</text>
+
+  <rect x="850" y="130" width="200" height="80" class="box priv"/>
+  <text x="950" y="162" text-anchor="middle" class="t">AWS Budgets</text>
+  <text x="950" y="182" text-anchor="middle" class="s">alerta por correo (50 % / 100 %)</text>
+
+  <!-- Flechas -->
+  <path d="M200,285 C230,220 240,180 268,172" class="l"/>
+  <text x="206" y="222" class="lbl">1. abre la web</text>
+  <path d="M470,170 L558,170" class="l"/>
+  <path d="M200,335 L268,360" class="l"/>
+  <text x="196" y="372" class="lbl">2. simular en</text>
+  <text x="196" y="388" class="lbl">la nube (JSON)</text>
+  <path d="M470,365 L558,365" class="l"/>
+  <path d="M760,365 L848,360" class="l"/>
+  <text x="768" y="352" class="lbl">invoca</text>
+  <path d="M660,410 L660,478" class="l"/>
+  <text x="668" y="450" class="lbl">lee / guarda</text>
+  <path d="M760,400 C810,440 830,470 848,500" class="l"/>
+  <text x="790" y="470" class="lbl">logs</text>
+
+  <text x="30" y="600" class="s">Seguridad: sin llaves en el código, IAM de mínimo privilegio (simulate solo lee/escribe results/* e invoca batch), buckets cifrados y sin acceso público, Checkov en CI.</text>
+</svg>

@@ -1,0 +1,16 @@
+%% Fuente en Mermaid del diagrama docs/arquitectura.svg
+flowchart LR
+  U[Navegador<br/>interfaz + motor en Web Worker] -->|1. abre la web| CF[Amazon CloudFront<br/>HTTPS]
+  CF --> W[(S3 web<br/>privado, OAC)]
+  U -->|2. POST /simulate| API[API Gateway HTTP<br/>límite 5 pet./s]
+  API --> SIM[Lambda simulate<br/>valida, optimiza, resume]
+  SIM -->|invoca en paralelo| B[Lambda batch x 8<br/>corridas Monte Carlo]
+  SIM -->|lee / guarda| R[(S3 resultados<br/>caché 30 días)]
+  SIM --> L[CloudWatch Logs<br/>7 días]
+  B --> L
+  BUD[AWS Budgets] -->|alerta| MAIL[Correo del equipo]
+
+  classDef pub fill:#fff4e5,stroke:#e8780c
+  classDef priv fill:#eef4ff,stroke:#3b6fd8
+  class CF,API pub
+  class W,SIM,B,R,L,BUD priv
