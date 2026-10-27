@@ -132,7 +132,55 @@ code { background: var(--panel); padding: 0.1rem 0.35rem; border-radius: 4px; }
 .foot { border-top: 1px solid var(--line); padding: 2rem 6vw; color: var(--muted); font-size: 0.85rem; text-align: center; }
 .attrib { font-size: 0.75rem; }
 
+/* ---------- Escenas con el scroll ----------
+   Cada escena tiene un fondo fijo (sticky) que el JS anima con dos variables:
+   --e = cuánto entró la escena (0→1, abre el iris y enfoca) · --p = avance dentro de la escena (0→1, zoom lento). */
+.scene { position: relative; --e: 0; --p: 0; }
+.scene-sticky { position: sticky; top: 0; height: 100vh; margin-bottom: -100vh; overflow: hidden; z-index: 0;
+  clip-path: circle(calc(18% + var(--e) * 90%) at 50% 50%);
+  /* Mientras entra, el borde superior se funde con la escena anterior. */
+  --fade: calc((1 - var(--e)) * 45%);
+  -webkit-mask-image: linear-gradient(180deg, transparent var(--fade), #000 calc(var(--fade) + 30%));
+  mask-image: linear-gradient(180deg, transparent var(--fade), #000 calc(var(--fade) + 30%)); }
+.scene-bg { position: absolute; inset: -6%; background: var(--img) center / cover no-repeat;
+  transform: scale(calc(1.22 - var(--p) * 0.2)) translateY(calc(var(--p) * -3%));
+  filter: blur(calc((1 - var(--e)) * 10px)) saturate(calc(0.6 + var(--e) * 0.6)) brightness(calc(0.45 + var(--e) * 0.35)); will-change: transform, filter; }
+.scene-shade { position: absolute; inset: 0; background: linear-gradient(180deg, var(--bg) 0%, #07050f55 22%, #07050f66 70%, var(--bg) 100%),
+  radial-gradient(ellipse at 50% 50%, transparent 35%, #07050fcc 100%); }
+.scene-content { position: relative; z-index: 1; min-height: 160vh; max-width: 1200px; margin: 0 auto; padding: 35vh 6vw 30vh; display: grid; align-content: start; gap: 1.2rem; }
+.scene-content.split { grid-template-columns: 1fr 1fr; gap: 3rem; align-items: center; align-content: center; }
+@media (max-width: 860px) { .scene-content.split { grid-template-columns: 1fr; } }
+.glass { background: #0c0918b3; border: 1px solid #ffffff1f; border-radius: 16px; padding: 1.6rem; backdrop-filter: blur(10px) saturate(1.2); -webkit-backdrop-filter: blur(10px) saturate(1.2); box-shadow: 0 20px 60px #0009; }
+.glass h2 { margin-bottom: 1rem; }
+.scene .steps { margin: 0; }
+.scene .steps li.glass { padding: 1.4rem; }
+
+/* Aparición escalonada de tarjetas */
+.reveal { opacity: 0; transform: translateY(40px) scale(0.97); transition: opacity 0.9s cubic-bezier(.2, .8, .2, 1), transform 0.9s cubic-bezier(.2, .8, .2, 1); transition-delay: calc(var(--i, 0) * 120ms); }
+.reveal.in { opacity: 1; transform: none; }
+.card-demo.reveal.in { transform: rotate(1.5deg); }
+
+/* Títulos palabra por palabra */
+.words .w { display: inline-block; opacity: 0; transform: translateY(0.6em) rotate(4deg); filter: blur(6px); transition: opacity 0.6s, transform 0.6s, filter 0.6s; transition-delay: calc(var(--i) * 55ms); }
+.words.in .w { opacity: 1; transform: none; filter: none; }
+
+/* Prólogo: cada frase se enciende según su posición en pantalla (--o lo pone el JS). */
+.prologue .scene-content { min-height: 260vh; padding-top: 70vh; gap: 40vh; justify-items: center; text-align: center; }
+.line { --o: 0; margin: 0; font: clamp(1.4rem, 3.4vw, 2.6rem) 'Special Elite', monospace; color: #ece8ff; opacity: var(--o); transform: translateY(calc((1 - var(--o)) * 30px)); filter: blur(calc((1 - var(--o)) * 6px)); text-shadow: 0 2px 20px #000; }
+.line.big { font: clamp(3rem, 9vw, 7rem) Creepster, sans-serif; letter-spacing: 0.04em; text-shadow: 0 0 30px #ff3b3b88; }
+
+/* Barra de "nivel de contagio" = avance del scroll */
+.infection { position: fixed; top: 1.95rem; left: 0; right: 0; z-index: 19; height: 4px; background: #ffffff10; }
+.infection b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--green), var(--yellow), var(--red)); box-shadow: 0 0 12px var(--red); }
+.infection span { position: absolute; right: 0.8rem; top: 8px; font: 0.7rem 'Special Elite', monospace; color: var(--muted); background: #07050fcc; padding: 0 0.4rem; border-radius: 4px; }
+
+.final .scene-content { justify-items: center; align-content: center; text-align: center; min-height: 130vh; padding: 45vh 6vw 25vh; }
+.final h2.glitch.small { color: #ffd27a; text-shadow: 0 0 24px #ff8a1f88; }
+.final p { color: #ece8ff; }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
-  .section { opacity: 1; transform: none; }
+  .section, .reveal, .words .w { opacity: 1; transform: none; filter: none; }
+  .line { --o: 1 !important; }
+  .scene-sticky { clip-path: none; }
 }

@@ -185,7 +185,37 @@ $('bars').innerHTML = SCENARIOS.map(([name, pct]) => `<div class="bar${pct < 80 
     <rect x="${W - 110}" y="12" width="14" height="3" fill="#2dd4bf"/><text x="${W - 92}" y="17" fill="#ece8ff" font-size="12">Modelo</text>`;
 })();
 
-// Aparición de secciones y contadores al hacer scroll.
+// ---------- Scroll ----------
+// Títulos palabra por palabra: se envuelve cada palabra en un <span> con su retraso.
+document.querySelectorAll('.words').forEach((h) => {
+  let n = 0;
+  const wrap = (node) => {
+    for (const child of [...node.childNodes]) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        const frag = document.createDocumentFragment();
+        for (const part of child.textContent.split(/(\s+)/)) {
+          if (!part.trim()) frag.append(part);
+          else {
+            const w = document.createElement('span');
+            w.className = 'w';
+            w.style.setProperty('--i', n++);
+            w.textContent = part;
+            frag.append(w);
+          }
+        }
+        child.replaceWith(frag);
+      } else wrap(child);
+    }
+  };
+  wrap(h);
+});
+// Retraso escalonado entre tarjetas hermanas.
+document.querySelectorAll('.reveal').forEach((el) => {
+  const siblings = [...el.parentElement.children].filter((c) => c.classList.contains('reveal'));
+  el.style.setProperty('--i', siblings.indexOf(el));
+});
+
+// Aparición de secciones, tarjetas, títulos y contadores al entrar en pantalla.
 const countUp = (el) => {
   const target = Number(el.dataset.count);
   const start = performance.now();
@@ -199,10 +229,45 @@ const countUp = (el) => {
 const io = new IntersectionObserver((entries) => {
   for (const e of entries) {
     if (!e.isIntersecting) continue;
-    e.target.classList.add('visible');
-    e.target.querySelectorAll('[data-count]').forEach(countUp);
-    e.target.querySelectorAll('[data-w]').forEach((b) => (b.style.width = `${b.dataset.w}%`));
-    io.unobserve(e.target);
+    const el = e.target;
+    el.classList.add(el.classList.contains('section') ? 'visible' : 'in');
+    el.querySelectorAll('[data-count]').forEach(countUp);
+    el.querySelectorAll('[data-w]').forEach((b) => (b.style.width = `${b.dataset.w}%`));
+    io.unobserve(el);
   }
-}, { threshold: 0.2 });
-document.querySelectorAll('.section').forEach((s) => io.observe(s));
+}, { threshold: 0.25 });
+document.querySelectorAll('.section, .reveal, .words').forEach((el) => io.observe(el));
+
+// Escenas: --e (entrada, abre el iris y enfoca) y --p (avance, zoom lento); frases del prólogo;
+// barra de "nivel de contagio" según cuánto se ha bajado.
+const scenes = [...document.querySelectorAll('.scene')];
+const lines = [...document.querySelectorAll('.line')];
+const clamp = (x) => Math.max(0, Math.min(1, x));
+let ticking = false;
+function onScroll() {
+  ticking = false;
+  const vh = innerHeight;
+  for (const sc of scenes) {
+    const r = sc.getBoundingClientRect();
+    if (r.bottom < -vh || r.top > 2 * vh) continue;
+    sc.style.setProperty('--e', clamp((vh - r.top) / (vh * 0.9)).toFixed(3));
+    sc.style.setProperty('--p', clamp(-r.top / Math.max(1, r.height - vh)).toFixed(3));
+  }
+  for (const l of lines) {
+    const r = l.getBoundingClientRect();
+    const center = (r.top + r.height / 2) / vh; // 0 arriba · 1 abajo
+    l.style.setProperty('--o', clamp(1 - Math.abs(center - 0.5) * 2.4).toFixed(3));
+  }
+  const total = document.documentElement.scrollHeight - vh;
+  const pct = Math.round(clamp(scrollY / Math.max(1, total)) * 100);
+  $('infectionBar').style.width = `${pct}%`;
+  $('infectionLabel').textContent = pct >= 99 ? 'Brote contenido ✓' : `Nivel de contagio ${pct} %`;
+}
+addEventListener('scroll', () => {
+  if (!ticking) {
+    ticking = true;
+    requestAnimationFrame(onScroll);
+  }
+}, { passive: true });
+addEventListener('resize', onScroll);
+onScroll();
