@@ -54,22 +54,26 @@ export class CityPlayer {
     new ResizeObserver(() => this.trace && this.resize()).observe(root);
   }
 
-  load(trace, cfg, totalRuns) {
+  load(trace, cfg, totalRuns, terms) {
     this.pause();
     this.trace = trace;
+    this.terms = terms;
     this.selected = -1;
-    // Mapa satelital real de Manta: se carga una vez y, cuando llega, se redibuja el fondo.
-    if (!this.mapImage) {
+    // Mapa satelital real de la ciudad: se carga cuando cambia y, cuando llega, se redibuja el fondo.
+    if (this.mapImage?.dataset.src !== trace.layout.image) {
       this.mapImage = new Image();
+      this.mapImage.dataset.src = trace.layout.image;
       this.mapImage.onload = () => this.trace && this.resize();
       this.mapImage.src = trace.layout.image;
     }
+    // Mapa alto (por ejemplo Guayaquil): los tres paneles en columnas.
+    this.root.querySelector('.city-grid').classList.toggle('tall', trace.layout.aspect < 1);
     this.closeDays = cfg.closeDays;
     this.fumigationDays = cfg.fumigationDays;
     this.slider.max = String(trace.days);
     this.slider.disabled = false;
     this.playBtn.disabled = false;
-    this.note.textContent = `el mismo brote, tres decisiones distintas · corrida típica: la mediana de los brotes que despegan (n.º ${trace.run + 1} de ${totalRuns})`;
+    this.note.textContent = `el mismo brote con tres decisiones distintas · se muestra la corrida típica (la mediana de los brotes que crecen, n.º ${trace.run + 1} de ${totalRuns})`;
     this.resize();
     this.show(0);
     this.play();
@@ -125,9 +129,12 @@ export class CityPlayer {
       ctx.stroke();
     }
     ctx.setLineDash([]);
-    ctx.fillStyle = 'rgba(147, 197, 253, 0.75)';
-    ctx.font = `italic ${Math.max(9, w / 55)}px system-ui, sans-serif`;
-    ctx.fillText('Océano Pacífico', w * 0.03, h * 0.09);
+    const water = this.trace.layout.water;
+    if (water) {
+      ctx.fillStyle = 'rgba(147, 197, 253, 0.75)';
+      ctx.font = `italic ${Math.max(9, w / 55)}px system-ui, sans-serif`;
+      ctx.fillText(water.text, w * water.x, h * water.y);
+    }
     ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
     ctx.font = `${Math.max(7, w / 120)}px system-ui, sans-serif`;
     ctx.textAlign = 'right';
@@ -198,25 +205,36 @@ export class CityPlayer {
     const nameSize = Math.max(9, Math.min(17, w / 34));
     const lineH = nameSize * 1.15;
     const at = (name) => regions.find((x) => x.name === name);
-    for (const r of regions) label(r.name, r.x * w, r.y * h, nameSize, '#f1edff');
+    // Nombres de zonas sin que se pisen: si uno choca con otro ya escrito, baja una línea.
+    const placed = [];
+    this.namePos = {};
+    for (const r of regions) {
+      ctx.font = `700 ${nameSize}px system-ui, sans-serif`;
+      const half = ctx.measureText(r.name).width / 2 + 2;
+      let y = r.y * h;
+      while (placed.some((q) => Math.abs(q.x - r.x * w) < q.half + half && Math.abs(q.y - y) < nameSize)) y += nameSize * 1.1;
+      placed.push({ x: r.x * w, y, half });
+      this.namePos[r.name] = y;
+      label(r.name, r.x * w, y, nameSize, '#f1edff');
+    }
     // Avisos apilados debajo del nombre: mercado, colegios, fumigación.
     for (const c of run.closures) {
       // Un cierre decidido el día c.day se ve en los cuadros c.day + 1 … c.day + closeDays.
       if (this.day <= c.day || this.day > c.day + this.closeDays) continue;
       const r = at(c.parroquia);
-      const text = c.layer === 'mercado' ? '🔒 Mercado' : '🔒 Colegios';
-      label(text, r.x * w, r.y * h + lineH * (c.layer === 'mercado' ? 1 : 2), nameSize * 0.9, '#ffffff');
+      const text = c.layer === 'mercado' ? 'Mercado cerrado' : 'Colegios cerrados';
+      label(text, r.x * w, this.namePos[r.name] + lineH * (c.layer === 'mercado' ? 1 : 2), nameSize * 0.9, '#ffffff');
     }
     for (const f of run.fumigations ?? []) {
       if (this.day <= f.day || this.day > f.day + this.fumigationDays) continue;
       const r = at(f.parroquia);
-      label('🦟 Fumigando', r.x * w, r.y * h - lineH, nameSize * 0.9, '#2dd4bf');
+      label('Fumigando', r.x * w, this.namePos[r.name] - lineH, nameSize * 0.9, '#2dd4bf');
     }
     ctx.textAlign = 'start';
     if (this.selected >= 0) this.drawSelected(p, run, ctx);
     p.stats.innerHTML =
-      `<span>Zombis ahora: <b class="z">${fmt(run.I[this.day] * t.scale)}</b></span>` +
-      `<span>Mordidos en total: <b>${fmt(run.cumulative[this.day] * t.scale)}</b></span>`;
+      `<span>${this.terms?.active ?? 'Casos activos'}: <b class="z">${fmt(run.I[this.day] * t.scale)}</b></span>` +
+      `<span>Total ${this.terms?.bittenM ?? 'contagiados'}: <b>${fmt(run.cumulative[this.day] * t.scale)}</b></span>`;
   }
 
   // Anillo sobre la persona elegida y, si ya la mordieron en esta realidad, línea hacia quien la mordió.
@@ -256,13 +274,13 @@ export class CityPlayer {
     const parts = [];
     if (d > 0 && a.quarantinesByDay[d - 1]) parts.push(`${fmt(a.quarantinesByDay[d - 1] * t.scale)} hogares a cuarentena`);
     if (d > 0 && a.dosesByDay[d - 1]) parts.push(`${fmt(a.dosesByDay[d - 1] * t.scale)} vacunas aplicadas`);
-    for (const c of a.closures) if (c.day === d - 1) parts.push(`🔒 cierra ${c.layer === 'mercado' ? 'el mercado' : 'los colegios'} de ${c.parroquia}`);
-    for (const f of a.fumigations ?? []) if (f.day === d - 1) parts.push(`🦟 brigada de fumigación en ${f.parroquia}`);
+    for (const c of a.closures) if (c.day === d - 1) parts.push(`cierra ${c.layer === 'mercado' ? 'el mercado' : 'los colegios'} de ${c.parroquia}`);
+    for (const f of a.fumigations ?? []) if (f.day === d - 1) parts.push(`brigada de fumigación en ${f.parroquia}`);
     const saved = (t.nada.cumulative[d] - a.cumulative[d]) * t.scale;
     const sentences = [];
-    if (d === 0) sentences.push('Día 0 — aparece un solo zombi. Nadie lo sabe todavía.');
-    else sentences.push(parts.length ? `Día ${d} — el Comité: ${parts.join(' · ')}.` : `Día ${d}.`);
-    if (saved > 0) sentences.push(`Hasta hoy, ${fmt(saved)} personas menos mordidas que sin hacer nada.`);
+    if (d === 0) sentences.push(`Día 0: aparece ${this.terms?.one ?? 'un caso'}. Nadie lo sabe todavía.`);
+    else sentences.push(parts.length ? `Día ${d}. El Comité: ${parts.join(' · ')}.` : `Día ${d}.`);
+    if (saved > 0) sentences.push(`Hasta hoy, ${fmt(saved)} personas ${this.terms?.bitten ?? 'contagiadas'} menos que sin hacer nada.`);
     this.events.textContent = sentences.join(' ');
   }
 
@@ -270,7 +288,7 @@ export class CityPlayer {
     if (!this.trace) return;
     if (this.day >= this.trace.days) this.show(0);
     this.playing = true;
-    this.playBtn.textContent = '⏸ Pausa';
+    this.playBtn.textContent = 'Pausa';
     let last = performance.now();
     let acc = this.day;
     const step = (now) => {
@@ -286,6 +304,6 @@ export class CityPlayer {
 
   pause() {
     this.playing = false;
-    this.playBtn.textContent = '▶ Reproducir';
+    this.playBtn.textContent = 'Reproducir';
   }
 }

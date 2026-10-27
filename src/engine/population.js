@@ -1,7 +1,7 @@
-// Red de contactos sintética de Manta por capas: hogar, colegio, trabajo, bus, mercado y barrio.
+// Red de contactos sintética de la ciudad por capas: hogar, colegio, trabajo, bus, mercado y barrio.
 // Cada persona pertenece como máximo a un "lugar" por capa. El contagio ocurre dentro de cada lugar.
 import { Rng, hashSeed, expNeg } from './rng.js';
-import { PARROQUIAS } from './config.js';
+import { cityOf } from './cities.js';
 
 export const LAYERS = ['hogar', 'colegio', 'trabajo', 'bus', 'mercado', 'barrio'];
 export const HOME = 0;
@@ -44,6 +44,17 @@ function groupInto(members, size, memberPlace, firstPlaceId) {
 export function buildPopulation(cfg) {
   const rng = new Rng(hashSeed(cfg.seed, 'poblacion'));
   const N = cfg.agents;
+  const city = cityOf(cfg);
+  const P = city.zones.length;
+  // Reparto de hogares entre zonas: proporcional a su población si la ciudad la trae; si no, uniforme.
+  const shareTotal = city.zoneShare ? city.zoneShare.reduce((a, b) => a + b, 0) : 0;
+  const pickZone = () => {
+    if (!city.zoneShare) return rng.int(P); // SUPUESTO para Manta: reparto uniforme entre parroquias urbanas
+    let u = rng.next() * shareTotal;
+    let z = 0;
+    while (z < P - 1 && u >= city.zoneShare[z]) u -= city.zoneShare[z++];
+    return z;
+  };
   const parroquia = new Int8Array(N);
   const role = new Int8Array(N);
   const layerPlace = LAYERS.map(() => new Int32Array(N).fill(-1));
@@ -54,7 +65,7 @@ export function buildPopulation(cfg) {
   let household = 0;
   while (person < N) {
     const size = rng.next() < cfg.singleHouseholdShare ? 1 : 2 + poisson(rng, lambda);
-    const p = rng.int(PARROQUIAS.length); // SUPUESTO: reparto uniforme entre parroquias urbanas
+    const p = pickZone();
     for (let i = 0; i < size && person < N; i++, person++) {
       layerPlace[HOME][person] = household;
       parroquia[person] = p;
@@ -74,7 +85,7 @@ export function buildPopulation(cfg) {
   // Colegios y trabajos: dentro de cada parroquia.
   let classes = 0;
   let workplaces = 0;
-  for (let p = 0; p < PARROQUIAS.length; p++) {
+  for (let p = 0; p < P; p++) {
     const students = shuffle(rng, [...Array(N).keys()].filter((i) => parroquia[i] === p && role[i] === ROLE_STUDENT));
     const workers = shuffle(rng, [...Array(N).keys()].filter((i) => parroquia[i] === p && role[i] === ROLE_WORKER));
     const c = groupInto(students, cfg.classSize, layerPlace[COLEGIO], classes);
@@ -95,13 +106,13 @@ export function buildPopulation(cfg) {
     layerPlace[MERCADO][i] = parroquia[i];
     layerPlace[BARRIO][i] = parroquia[i];
   }
-  for (let p = 0; p < PARROQUIAS.length; p++) {
+  for (let p = 0; p < P; p++) {
     placeParroquia[MERCADO].push(p);
     placeParroquia[BARRIO].push(p);
   }
   placeParroquia[HOME] = null;
 
-  const placeCount = [household, classes, workplaces, routes, PARROQUIAS.length, PARROQUIAS.length];
+  const placeCount = [household, classes, workplaces, routes, P, P];
   const placeSize = placeCount.map((n, l) => {
     const size = new Int32Array(n);
     for (let i = 0; i < N; i++) if (layerPlace[l][i] >= 0) size[layerPlace[l][i]]++;
@@ -139,6 +150,8 @@ export function buildPopulation(cfg) {
 
   return {
     N,
+    city: cfg.city,
+    names: city.zones,
     parroquia,
     role,
     layerPlace,

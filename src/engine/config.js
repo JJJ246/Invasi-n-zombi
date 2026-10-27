@@ -1,16 +1,21 @@
 // Parámetros del escenario. Cada valor por defecto está documentado en el README (tabla de supuestos)
 // con su fuente, o marcado como SUPUESTO cuando no hay dato público.
 import { hashSeed } from './rng.js';
+import { CITIES } from './cities.js';
 
-export const PARROQUIAS = ['Manta', 'Tarqui', 'Los Esteros', 'Eloy Alfaro', 'San Mateo'];
+// Zonas de la ciudad por defecto (Manta). Para otra ciudad, usar zonesOf(cfg) de cities.js.
+export const PARROQUIAS = CITIES.manta.zones;
 
 export const DEFAULTS = Object.freeze({
   // --- Reproducibilidad ---
   seed: 2026,
   runs: 100, // corridas Monte Carlo por estrategia
 
+  // --- Ciudad: sus zonas, mapa y demografía vienen de cities.js ---
+  city: 'manta',
+
   // --- Población (INEC, Censo 2022) ---
-  realPopulation: 258697, // población urbana de Manta
+  realPopulation: 258697, // población urbana de Manta (cada ciudad trae la suya)
   agents: 10000, // agentes simulados; cada agente representa realPopulation / agents personas
   householdMean: 3.3, // personas por hogar en Manabí
   singleHouseholdShare: 0.145, // hogares unipersonales en Manabí
@@ -99,7 +104,10 @@ const LIMITS = {
 
 // Combina los valores del usuario con los de por defecto y rechaza valores fuera de rango.
 export function makeConfig(input = {}) {
-  const cfg = JSON.parse(JSON.stringify(DEFAULTS));
+  const city = input.city ?? DEFAULTS.city;
+  if (!CITIES[city]) throw new Error(`Ciudad desconocida: ${city}`);
+  // Valores por defecto de la ciudad (población, hogares, dónde empieza) y luego los del usuario.
+  const cfg = { ...JSON.parse(JSON.stringify(DEFAULTS)), ...CITIES[city].defaults, city };
   for (const [key, value] of Object.entries(input)) {
     if (!(key in DEFAULTS)) throw new Error(`Parámetro desconocido: ${key}`);
     if (typeof DEFAULTS[key] === 'object') {
@@ -122,14 +130,14 @@ export function makeConfig(input = {}) {
   if (cfg.latentMin > cfg.latentMax || cfg.infectiousMin > cfg.infectiousMax) {
     throw new Error('Los mínimos de duración no pueden superar a los máximos');
   }
-  validateStart(cfg.start);
+  validateStart(cfg.start, CITIES[city].zones);
   return cfg;
 }
 
-function validateStart(start) {
+function validateStart(start, zones) {
   if (start === 'aleatorio' || start === 'colegio') return;
   const [kind, place] = String(start).split(':');
-  if ((kind === 'mercado' || kind === 'parroquia') && PARROQUIAS.includes(place)) return;
+  if ((kind === 'mercado' || kind === 'parroquia') && zones.includes(place)) return;
   throw new Error(`Punto de inicio no válido: ${start}`);
 }
 

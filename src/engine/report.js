@@ -1,7 +1,15 @@
 // Traduce los resultados del Monte Carlo a decisiones en lenguaje simple.
 // Es una plantilla determinista: no depende de ningún servicio externo y nunca falla en vivo.
 
+import { CITIES } from './cities.js';
+
 const n = (x) => Math.round(x).toLocaleString('es-EC');
+
+// Vocabulario: el mismo motor sirve para la demo del reto (zombis) o para un brote real.
+export const TERMS = {
+  zombi: { S: 'Sano', E: 'Mordido', I: 'Zombi', R: 'Exorcizado', bitten: 'mordidas', bittenM: 'mordidos', active: 'Zombis activos', one: 'un zombi' },
+  real: { S: 'Sano', E: 'Contagiado sin síntomas', I: 'Contagioso', R: 'Recuperado', bitten: 'contagiadas', bittenM: 'contagiados', active: 'Casos activos', one: 'un caso' },
+};
 const pct = (x) => `${Math.round(x * 100)} %`;
 const usd = (x) => `USD ${n(x)}`;
 const dec = (x) => x.toLocaleString('es-EC', { maximumFractionDigits: 2 });
@@ -28,22 +36,24 @@ export function headline(summary) {
   );
 }
 
-export function mayorReport(summary) {
+export function mayorReport(summary, opts = {}) {
   const s = summary;
   const c = s.config;
+  const T = TERMS[opts.theme ?? 'zombi'];
+  const city = CITIES[c.city];
   const none = s.strategies.nada;
   const adaptive = s.strategies.adaptativa;
   const policy = s.policy ?? { priority: 'anillo', closures: true, quarantine: true };
   const lines = [];
 
-  lines.push('INFORME PARA EL ALCALDE DE MANTA');
+  lines.push(`INFORME PARA LA ALCALDÍA DE ${city.name.toUpperCase()}`);
   lines.push('');
   lines.push('LA SITUACIÓN');
   // Período latente largo = plaga tipo dengue (incluye la incubación dentro del mosquito).
-  const disease = c.latentMin >= 8 ? 'al dengue de Manabí 2024 (calibrada con datos reales del MSP)' : 'a una influenza fuerte';
+  const disease = opts.disease ?? (c.latentMin >= 8 ? 'parecida al dengue de Manabí 2024 (calibrada con datos reales del MSP)' : 'parecida a una influenza fuerte');
   lines.push(
-    `Una plaga parecida ${disease} (cada caso contagia en promedio a ${dec(c.r0)} personas) empieza ${START_TEXT(c.start)}. ` +
-      `Si no hacemos nada, en ${c.days} días serían mordidas ${n(none.infected.mean)} personas ` +
+    `Una plaga ${disease} (cada caso contagia en promedio a ${dec(c.r0)} personas) empieza ${START_TEXT(c.start)}. ` +
+      `Si no hacemos nada, en ${c.days} días serían ${T.bitten} ${n(none.infected.mean)} personas ` +
       `(entre ${n(none.infected.p5)} y ${n(none.infected.p95)} según la simulación), con el peor día alrededor del día ${Math.round(none.peakDay.mean)}.`,
   );
   lines.push('');
@@ -96,7 +106,7 @@ export function mayorReport(summary) {
   lines.push('');
   lines.push('QUÉ VAMOS A LOGRAR');
   lines.push(
-    `Con este plan serían mordidas ${n(adaptive.infected.mean)} personas en promedio (entre ${n(adaptive.infected.p5)} y ${n(adaptive.infected.p95)}). ` +
+    `Con este plan serían ${T.bitten} ${n(adaptive.infected.mean)} personas en promedio (entre ${n(adaptive.infected.p5)} y ${n(adaptive.infected.p95)}). ` +
       `Eso son ${n(s.savedVsNone.mean)} personas salvadas frente a no hacer nada y ${n(s.savedVsRandom.mean)} frente a repartir los mismos recursos al azar.`,
   );
   lines.push(`Costo promedio: ${usd(adaptive.spent.mean)} de un presupuesto de ${usd(c.budget)}.`);

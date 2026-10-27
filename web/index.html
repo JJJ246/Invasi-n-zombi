@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Comité de Contención · La Plaga Zombie en Manta</title>
-  <meta name="description" content="Simulador de la plaga zombie en Manta y optimizador de vacunas, cuarentenas y cierres con recursos limitados.">
+  <title>Comité de Contención · Simulador de brotes</title>
+  <meta name="description" content="Simula cómo se propaga un brote en una ciudad real y encuentra a quién vacunar, qué cerrar y dónde fumigar con recursos limitados.">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
   <script src="config.js"></script>
@@ -12,113 +12,146 @@
 </head>
 <body>
   <header class="top">
-    <div>
-      <p class="eyebrow">SpookyThon 2026 · Track B · <a href="portada.html">🎃 Ver la portada</a></p>
-      <h1>Comité de Contención <span aria-hidden="true">🧟</span></h1>
-      <p class="sub">Simula la plaga en Manta y encuentra cómo usar vacunas, cuarentenas y cierres para que muerda a la menor cantidad de gente posible.</p>
+    <div class="brand">
+      <span class="logo" aria-hidden="true"></span>
+      <div>
+        <h1>Comité de Contención</h1>
+        <p>Simulador de brotes y plan de respuesta con recursos limitados</p>
+      </div>
     </div>
+    <nav class="top-links">
+      <a href="portada.html">Historia del proyecto</a>
+      <a href="https://github.com/JJJ246/Invasi-n-zombi" target="_blank" rel="noopener">Código</a>
+    </nav>
   </header>
 
   <main class="layout">
     <form id="controls" class="panel" autocomplete="off" novalidate>
-      <h2>Escenario</h2>
+      <section class="step">
+        <h2><span class="num">1</span>¿Qué está pasando?</h2>
+        <div class="scenarios" id="scenarios" role="radiogroup" aria-label="Escenario"></div>
+        <label>Ciudad
+          <select name="city">
+            <option value="manta">Manta (Manabí) · 258.697 habitantes</option>
+            <option value="guayaquil">Guayaquil (Guayas) · 2.650.288 habitantes</option>
+          </select>
+        </label>
+        <label>Dónde empieza
+          <select name="start"></select>
+        </label>
+        <label class="slider">Qué tan contagioso es
+          <span class="value"><output id="r0Out"></output> <small>personas contagia cada caso</small></span>
+          <input type="range" name="r0" min="0.8" max="5" step="0.1">
+        </label>
+        <label>Casos al inicio
+          <input type="number" name="initialInfected" min="1" max="200" step="1">
+        </label>
+      </section>
 
-      <label>Contagio (R0: a cuántos muerde cada zombi) <output id="r0Out"></output>
-        <input type="range" name="r0" min="0.8" max="5" step="0.1">
-      </label>
-      <label>Vacunas que llegan por día <output id="dosesOut"></output>
-        <input type="range" name="dosesPerDay" min="0" max="10000" step="250">
-      </label>
-      <label>Eficacia de la vacuna <output id="effOut"></output>
-        <input type="range" name="vaccineEfficacy" min="0" max="1" step="0.05">
-      </label>
-      <label>Presupuesto total (USD)
-        <input type="number" name="budget" min="0" step="10000">
-      </label>
-      <label>Dónde empieza el brote
-        <select name="start">
-          <option value="mercado:Tarqui">Mercado de Tarqui</option>
-          <option value="mercado:Manta">Mercado de Manta (centro)</option>
-          <option value="mercado:Los Esteros">Mercado de Los Esteros</option>
-          <option value="mercado:Eloy Alfaro">Mercado de Eloy Alfaro</option>
-          <option value="mercado:San Mateo">Mercado de San Mateo</option>
-          <option value="colegio">Un colegio</option>
-          <option value="aleatorio">Al azar en la ciudad</option>
-        </select>
-      </label>
-      <label>Zombis iniciales
-        <input type="number" name="initialInfected" min="1" max="200" step="1">
-      </label>
-
-      <details>
-        <summary>Más parámetros</summary>
-        <label>Día en que el comité empieza a actuar <input type="number" name="responseStartDay" min="0" max="120"></label>
-        <label>Día en que llegan las vacunas <input type="number" name="vaccineStartDay" min="0" max="120"></label>
-        <label>Probabilidad diaria de reportar a un zombi <input type="number" name="detectionProb" min="0.01" max="1" step="any"></label>
-        <label>Cumplimiento de la cuarentena <input type="number" name="quarantineCompliance" min="0" max="1" step="any"></label>
-        <label>Costo por dosis (USD) <input type="number" name="costPerDose" min="0" step="1"></label>
-        <label>Costo de cuarentena por hogar y día (USD) <input type="number" name="quarantineCostPerHouseholdDay" min="0" step="1"></label>
-        <label>Costo de cierre por parroquia y día (USD) <input type="number" name="closureCostPerDay" min="0" step="500"></label>
-        <label>Días de simulación <input type="number" name="days" min="30" max="365"></label>
-        <label class="check"><input type="checkbox" name="vectorBorne"> La transmite un mosquito (permite brigadas de fumigación)</label>
+      <section class="step">
+        <h2><span class="num">2</span>¿Con qué recursos cuenta?</h2>
+        <label class="slider">Vacunas que llegan por día
+          <span class="value"><output id="dosesOut"></output></span>
+          <input type="range" name="dosesPerDay" min="0" max="100000" step="250">
+        </label>
+        <label class="slider">Cuánto protege la vacuna
+          <span class="value"><output id="effOut"></output></span>
+          <input type="range" name="vaccineEfficacy" min="0" max="1" step="0.05">
+        </label>
         <div class="row">
-          <label>Días como mordido (mín.) <input type="number" name="latentMin" min="1" max="30"></label>
-          <label>(máx.) <input type="number" name="latentMax" min="1" max="30"></label>
+          <label>Presupuesto (USD)
+            <input type="number" name="budget" min="0" step="10000">
+          </label>
+          <label>El comité actúa desde el día
+            <input type="number" name="responseStartDay" min="0" max="120">
+          </label>
         </div>
-        <div class="row">
-          <label>Días como zombi (mín.) <input type="number" name="infectiousMin" min="1" max="30"></label>
-          <label>(máx.) <input type="number" name="infectiousMax" min="1" max="30"></label>
+        <details>
+          <summary>Más supuestos</summary>
+          <div class="row">
+            <label>Llegan las vacunas el día <input type="number" name="vaccineStartDay" min="0" max="120"></label>
+            <label>Días a simular <input type="number" name="days" min="30" max="365"></label>
+          </div>
+          <div class="row">
+            <label>Se reporta cada día el <input type="number" name="detectionProb" min="0.01" max="1" step="any"> <small class="unit">de los casos (0 a 1)</small></label>
+            <label>Cumple la cuarentena el <input type="number" name="quarantineCompliance" min="0" max="1" step="any"> <small class="unit">de la gente (0 a 1)</small></label>
+          </div>
+          <div class="row">
+            <label>Costo por dosis (USD) <input type="number" name="costPerDose" min="0" step="1"></label>
+            <label>Cuarentena por hogar y día (USD) <input type="number" name="quarantineCostPerHouseholdDay" min="0" step="1"></label>
+          </div>
+          <label>Cierre de una zona por día (USD) <input type="number" name="closureCostPerDay" min="0" step="500"></label>
+          <label class="check"><input type="checkbox" name="vectorBorne"> Lo transmite un mosquito (permite fumigar)</label>
+          <div class="row">
+            <label>Días incubando (mín.) <input type="number" name="latentMin" min="1" max="30"></label>
+            <label>(máx.) <input type="number" name="latentMax" min="1" max="30"></label>
+          </div>
+          <div class="row">
+            <label>Días contagiando (mín.) <input type="number" name="infectiousMin" min="1" max="30"></label>
+            <label>(máx.) <input type="number" name="infectiousMax" min="1" max="30"></label>
+          </div>
+        </details>
+      </section>
+
+      <section class="step">
+        <h2><span class="num">3</span>Simular</h2>
+        <button type="submit" class="primary" id="runBtn">Calcular el mejor plan</button>
+        <div class="row small">
+          <label>Semilla <input type="number" name="seed" min="0" max="4294967295" step="1"></label>
+          <label>Simulaciones <input type="number" name="runs" min="10" max="5000" step="10"></label>
         </div>
-      </details>
+        <p class="hint">Misma semilla y mismos datos dan siempre el mismo resultado.</p>
+        <label class="check" id="cloudRow" hidden>
+          <input type="checkbox" id="useCloud" checked> Calcular en AWS (miles de simulaciones en paralelo)
+        </label>
+        <button type="button" class="link-btn" id="resetBtn">Volver a los valores del escenario</button>
+      </section>
 
-      <h2>Reproducibilidad</h2>
-      <div class="row">
-        <label>Semilla <input type="number" name="seed" min="0" max="4294967295" step="1"></label>
-        <label>Simulaciones <input type="number" name="runs" min="10" max="5000" step="10"></label>
-      </div>
-
-      <div class="actions">
-        <button type="submit" class="primary" id="runBtn">Simular</button>
-        <button type="button" id="resetBtn">Valores por defecto</button>
-      </div>
-      <label class="check" id="cloudRow" hidden>
-        <input type="checkbox" id="useCloud" checked> Correr en AWS (miles de simulaciones en paralelo)
-      </label>
-
-      <h2>🎃 Brote sorpresa</h2>
-      <p class="hint">Cambia las condiciones de un clic. La estrategia se vuelve a optimizar sola.</p>
-      <div class="presets">
-        <button type="button" data-preset="doble">×2 contagio</button>
-        <button type="button" data-preset="mitad">½ vacunas</button>
-        <button type="button" data-preset="mercado">Empieza en el mercado</button>
-        <button type="button" data-preset="variante">Vacuna cubre a medias</button>
-        <button type="button" data-preset="tarde">Respuesta tardía</button>
-        <button type="button" data-preset="pobre">½ presupuesto</button>
-      </div>
-      <button type="button" class="wide" data-preset="dengue">🦟 Dengue Manabí 2024 (calibrado con datos reales)</button>
+      <section class="step surprise">
+        <h2>Brote sorpresa</h2>
+        <p class="hint">Cambia una condición y el plan se recalcula solo.</p>
+        <div class="presets">
+          <button type="button" data-preset="doble">El doble de contagioso</button>
+          <button type="button" data-preset="mitad">La mitad de vacunas</button>
+          <button type="button" data-preset="variante">La vacuna protege a medias</button>
+          <button type="button" data-preset="tarde">Se actúa 10 días tarde</button>
+          <button type="button" data-preset="pobre">La mitad del presupuesto</button>
+          <button type="button" data-preset="mercado">Empieza en otro mercado</button>
+        </div>
+      </section>
     </form>
 
     <section class="results" aria-live="polite">
-      <div id="status" class="status">Listo. Pulsa <strong>Simular</strong>.</div>
-      <progress id="progress" max="100" value="0" hidden></progress>
+      <div class="statusbar">
+        <span id="status" class="status">Elige un escenario y pulsa <strong>Calcular el mejor plan</strong>.</span>
+        <progress id="progress" max="100" value="0" hidden></progress>
+      </div>
 
-      <p id="headline" class="headline"></p>
-      <div id="verdict" class="verdict" hidden></div>
+      <article class="card plan" id="planCard" hidden>
+        <div class="plan-head">
+          <div>
+            <p class="eyebrow" id="planTitle">Plan recomendado</p>
+            <p id="headline" class="headline"></p>
+          </div>
+        </div>
+        <ol id="planSteps" class="plan-steps"></ol>
+        <div id="verdict" class="verdict" hidden></div>
+      </article>
 
       <div class="kpis">
-        <div class="kpi"><span class="kpi-label">Salvados vs no hacer nada</span><span id="kSavedNone" class="kpi-value">—</span><span id="kSavedNoneRange" class="kpi-range"></span></div>
-        <div class="kpi"><span class="kpi-label">Salvados vs azar (mismos recursos)</span><span id="kSavedRandom" class="kpi-value">—</span><span id="kSavedRandomRange" class="kpi-range"></span></div>
-        <div class="kpi"><span class="kpi-label">Gana al azar en brotes que despegan</span><span id="kWin" class="kpi-value">—</span><span id="kWinNote" class="kpi-range"></span></div>
+        <div class="kpi"><span class="kpi-label">Personas protegidas frente a no hacer nada</span><span id="kSavedNone" class="kpi-value">—</span><span id="kSavedNoneRange" class="kpi-range"></span></div>
+        <div class="kpi"><span class="kpi-label">Frente a repartir lo mismo al azar</span><span id="kSavedRandom" class="kpi-value">—</span><span id="kSavedRandomRange" class="kpi-range"></span></div>
+        <div class="kpi"><span class="kpi-label">Brotes en que el plan gana al azar</span><span id="kWin" class="kpi-value">—</span><span id="kWinNote" class="kpi-range"></span></div>
         <div class="kpi"><span class="kpi-label">Costo promedio</span><span id="kCost" class="kpi-value">—</span><span id="kCostNote" class="kpi-range"></span></div>
       </div>
 
       <div id="changes" class="card changes" hidden></div>
 
-      <div class="card city">
+      <article class="card city">
         <div class="city-head">
-          <h3>La ciudad en vivo <small id="cityNote">el mismo brote, tres decisiones distintas</small></h3>
+          <h3>La ciudad, día a día <small id="cityNote">el mismo brote con tres decisiones distintas</small></h3>
           <div class="city-controls">
-            <button type="button" id="playBtn" disabled>▶ Reproducir</button>
+            <button type="button" id="playBtn" disabled>Reproducir</button>
             <input type="range" id="daySlider" min="0" max="120" value="0" disabled aria-label="Día">
             <span id="dayLabel" class="day">Día 0</span>
             <select id="speed" aria-label="Velocidad">
@@ -126,78 +159,70 @@
               <option value="10" selected>Normal</option>
               <option value="25">Rápido</option>
             </select>
-            <button type="button" id="meetBtn" class="meet" disabled title="Alguien que se salva gracias al Comité">🎲 Conoce a un vecino</button>
-            <button type="button" id="fullBtn" title="Pantalla completa">⛶ Pantalla completa</button>
+            <button type="button" id="meetBtn" disabled title="Alguien que se salva gracias al plan">Conocer a un vecino</button>
+            <button type="button" id="fullBtn" title="Pantalla completa">Pantalla completa</button>
           </div>
         </div>
-        <p class="hint tap">👆 Toca cualquier punto del mapa: detrás de cada uno hay una persona con su historia.</p>
+        <p class="hint tap">Toca cualquier punto del mapa: es una persona, con su casa, su rutina y su historia.</p>
         <div class="city-body">
-        <div class="city-grid">
-          <figure class="panel-city" data-strategy="nada">
-            <figcaption><span class="dot" style="--c: var(--zombie)"></span>No hacer nada</figcaption>
-            <canvas></canvas>
-            <div class="city-stats"></div>
-          </figure>
-          <figure class="panel-city" data-strategy="azar">
-            <figcaption><span class="dot" style="--c: var(--mordido)"></span>Al azar (mismos recursos)</figcaption>
-            <canvas></canvas>
-            <div class="city-stats"></div>
-          </figure>
-          <figure class="panel-city best" data-strategy="adaptativa">
-            <figcaption><span class="dot" style="--c: var(--sano)"></span>Estrategia del Comité</figcaption>
-            <canvas></canvas>
-            <div class="city-stats"></div>
-          </figure>
+          <div class="city-grid">
+            <figure class="panel-city" data-strategy="nada">
+              <figcaption><span class="dot" style="--c: var(--bad)"></span>Sin hacer nada</figcaption>
+              <canvas></canvas>
+              <div class="city-stats"></div>
+            </figure>
+            <figure class="panel-city" data-strategy="azar">
+              <figcaption><span class="dot" style="--c: var(--warn)"></span>Mismos recursos, al azar</figcaption>
+              <canvas></canvas>
+              <div class="city-stats"></div>
+            </figure>
+            <figure class="panel-city best" data-strategy="adaptativa">
+              <figcaption><span class="dot" style="--c: var(--good)"></span>Plan del Comité</figcaption>
+              <canvas></canvas>
+              <div class="city-stats"></div>
+            </figure>
+          </div>
+          <aside id="vecino" class="vecino" hidden aria-live="polite"></aside>
         </div>
-        <aside id="vecino" class="vecino" hidden aria-live="polite"></aside>
-        </div>
-        <div class="legend">
-          <span><i style="--c:#3f7d58"></i>Sano</span>
-          <span><i style="--c:#facc15"></i>Mordido (el comité no lo ve)</span>
-          <span><i style="--c:#ff3b3b"></i>Zombi</span>
-          <span><i style="--c:#60a5fa"></i>Exorcizado</span>
-          <span><i style="--c:#2dd4bf"></i>Vacunado</span>
-          <span><i style="--c:#c084fc"></i>Hogar en cuarentena</span>
-          <span>🔒 Mercado / colegios cerrados</span>
-        </div>
+        <div class="legend" id="legend"></div>
         <p id="cityEvents" class="events"></p>
-        <p class="attribution">Mapa real de Manta: imagen satelital © Esri, Maxar, Earthstar Geographics · límites de parroquias y densidad de edificios © colaboradores de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>. Cada punto es una persona simulada, ubicada donde de verdad hay casas.</p>
-      </div>
+        <p class="attribution">Mapa real: imagen satelital © Esri, Maxar, Earthstar Geographics · límites y densidad de edificios © colaboradores de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>. Cada punto es una persona simulada, ubicada donde de verdad hay casas.</p>
+      </article>
 
-      <div class="card">
-        <h3>Zombis activos por día <small>(promedio y rango del 5 % al 95 %)</small></h3>
+      <article class="card">
+        <h3 id="curveTitle">Casos activos por día <small>promedio y rango del 5 % al 95 % de las simulaciones</small></h3>
         <div class="chart"><canvas id="curve"></canvas></div>
-      </div>
+      </article>
 
-      <div class="card">
-        <h3>Calibración con datos reales <small>dengue en Manabí 2024, casos por semana</small></h3>
-        <div class="chart"><canvas id="calib"></canvas></div>
-        <p class="hint" id="calibNote"></p>
-      </div>
-
-      <div class="card">
-        <h3>Personas mordidas en total</h3>
+      <details class="card more">
+        <summary>Detalle de los resultados</summary>
         <table class="table" id="compare">
-          <thead><tr><th>Estrategia</th><th>Promedio</th><th>Rango (5 %–95 %)</th><th>Pico de zombis</th><th>Costo</th></tr></thead>
+          <thead><tr><th>Estrategia</th><th id="thInfected">Personas afectadas</th><th>Rango (5 %–95 %)</th><th>Pico de casos</th><th>Costo</th></tr></thead>
           <tbody></tbody>
         </table>
         <p class="hint" id="wasted"></p>
-      </div>
+      </details>
 
-      <div class="card">
-        <h3>Informe para el alcalde</h3>
+      <details class="card more">
+        <summary>Informe para la alcaldía (texto para copiar)</summary>
         <pre id="report" class="report">Aparecerá aquí después de simular.</pre>
         <button type="button" id="copyBtn">Copiar informe</button>
-      </div>
+      </details>
 
-      <div class="card">
-        <h3>Cómo eligió la estrategia</h3>
-        <p class="hint">Se probaron <span id="nPolicies">21</span> políticas en simulaciones de entrenamiento con semillas distintas a las de la evaluación. Gana la que deja menos mordidos; si empatan, la más barata.</p>
+      <details class="card more">
+        <summary>Cómo se eligió el plan</summary>
+        <p class="hint">Se probaron <span id="nPolicies">21</span> combinaciones en simulaciones de entrenamiento, con semillas distintas a las de la evaluación. Gana la que deja menos personas afectadas; si empatan, la más barata.</p>
         <table class="table" id="ranking">
-          <thead><tr><th>#</th><th>Prioridad de vacunas</th><th>Cierres</th><th>Cuarentenas</th><th>Fumigación</th><th>Reserva</th><th>Mordidos (entrenamiento)</th><th>Costo</th></tr></thead>
+          <thead><tr><th>#</th><th>A quién vacunar primero</th><th>Cierres</th><th>Cuarentenas</th><th>Fumigación</th><th>Reserva</th><th>Afectados (entrenamiento)</th><th>Costo</th></tr></thead>
           <tbody></tbody>
         </table>
-      </div>
+      </details>
+
+      <details class="card more">
+        <summary>Calibración con datos reales (dengue, Manabí 2024)</summary>
+        <div class="chart"><canvas id="calib"></canvas></div>
+        <p class="hint" id="calibNote"></p>
+      </details>
 
       <p class="footer" id="footer"></p>
     </section>

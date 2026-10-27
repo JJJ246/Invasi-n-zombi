@@ -1,6 +1,7 @@
 // Monte Carlo: repite la simulación muchas veces y resume promedios y rangos (percentiles 5–95).
 import { hashSeed } from './rng.js';
-import { makeConfig, configHash, scaleOf, PARROQUIAS } from './config.js';
+import { makeConfig, configHash, scaleOf } from './config.js';
+import { zonesOf } from './cities.js';
 import { buildPopulation } from './population.js';
 import { simulateRun, STRATEGIES } from './model.js';
 import { cityLayout } from './layout.js';
@@ -119,7 +120,7 @@ const stats = (values, factor = 1) => ({
   p95: percentile(values, 0.95) * factor,
 });
 
-// Resume todas las corridas. Las cifras de personas se expresan en habitantes reales de Manta.
+// Resume todas las corridas. Las cifras de personas se expresan en habitantes reales de la ciudad.
 export function aggregate(cfgInput, runs) {
   const cfg = makeConfig(cfgInput);
   const scale = scaleOf(cfg);
@@ -160,7 +161,7 @@ export function aggregate(cfgInput, runs) {
   const share = (list, pred) => (list.length ? list.filter(pred).length / list.length : 0);
 
   // Dónde y cuándo actuó la estrategia (para el informe al alcalde).
-  const dosesByParroquia = PARROQUIAS.map((name, p) => ({
+  const dosesByParroquia = zonesOf(cfg).map((name, p) => ({
     parroquia: name,
     doses: mean(runs.map((r) => r.adaptativa.dosesByParroquia[p])) * scale,
   })).sort((a, b) => b.doses - a.doses);
@@ -182,7 +183,7 @@ export function aggregate(cfgInput, runs) {
     .sort((a, b) => b.share - a.share);
 
   // Fumigaciones (modo dengue): en qué parroquias se activaron y en cuántas simulaciones.
-  const fumigations = PARROQUIAS.map((parroquia) => {
+  const fumigations = zonesOf(cfg).map((parroquia) => {
     const withIt = runs.filter((r) => r.adaptativa.fumigations.some((f) => f.parroquia === parroquia));
     const days = withIt.flatMap((r) => r.adaptativa.fumigations.filter((f) => f.parroquia === parroquia).map((f) => f.day));
     return { parroquia, share: withIt.length / runs.length, typicalDay: Math.round(percentile(days, 0.5)) };
@@ -252,7 +253,7 @@ export function traceRun(cfgInput, policy, run) {
     bus: pop.layerPlace[3],
     connectivity: Float32Array.from(pop.connectivity),
   };
-  return { run, seed, N: cfg.agents, days: cfg.days, scale: scaleOf(cfg), layout: cityLayout(pop, cfg.seed), people, nada: pick(none), azar: pick(random), adaptativa: pick(adaptive) };
+  return { run, seed, city: cfg.city, N: cfg.agents, days: cfg.days, scale: scaleOf(cfg), layout: cityLayout(pop, cfg.seed), people, nada: pick(none), azar: pick(random), adaptativa: pick(adaptive) };
 }
 
 // Atajo: optimiza la política, corre la evaluación y resume.

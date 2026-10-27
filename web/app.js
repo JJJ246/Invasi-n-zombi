@@ -1,9 +1,11 @@
-import { DEFAULTS } from './engine/config.js';
-import { headline, mayorReport } from './engine/report.js';
+import { makeConfig } from './engine/config.js';
+import { CITIES } from './engine/cities.js';
+import { headline, mayorReport, TERMS } from './engine/report.js';
 import { CityPlayer } from './city.js';
 import { renderVecino, interestingPeople } from './vecino.js';
 import { CALIBRATION } from './engine/calibration.js';
-import { DENGUE_MANABI_2024, DENGUE_PERIODS } from './engine/dengue-manabi-2024.js';
+import { DENGUE_MANABI_2024 } from './engine/dengue-manabi-2024.js';
+import { SCENARIOS } from './escenarios.js';
 
 const API_URL = (window.APP_CONFIG && window.APP_CONFIG.apiUrl) || '';
 const form = document.getElementById('controls');
@@ -12,39 +14,125 @@ const fmt = (x) => Math.round(x).toLocaleString('es-EC');
 const usd = (x) => `USD ${fmt(x)}`;
 
 const FIELDS = [
-  'r0', 'dosesPerDay', 'vaccineEfficacy', 'budget', 'start', 'initialInfected', 'responseStartDay', 'vaccineStartDay',
+  'city', 'r0', 'dosesPerDay', 'vaccineEfficacy', 'budget', 'start', 'initialInfected', 'responseStartDay', 'vaccineStartDay',
   'detectionProb', 'quarantineCompliance', 'costPerDose', 'quarantineCostPerHouseholdDay', 'closureCostPerDay', 'days',
   'seed', 'runs', 'latentMin', 'latentMax', 'infectiousMin', 'infectiousMax',
 ];
-const LABELS = { nada: 'No hacer nada', azar: 'Al azar (mismos recursos)', adaptativa: 'Estrategia del Comité' };
-const COLORS = { nada: '#f87171', azar: '#facc15', adaptativa: '#4ade80' };
-const PRIORITY = { anillo: 'Entorno de casos + más conectados', mixto: 'Mixta', conectados: 'Más conectados de la ciudad' };
+const TEXT_FIELDS = new Set(['city', 'start']);
+const LABELS = { nada: 'Sin hacer nada', azar: 'Mismos recursos, al azar', adaptativa: 'Plan del Comité' };
+const COLORS = { nada: '#ef5350', azar: '#f2b33d', adaptativa: '#34c77b' };
+const PRIORITY = { anillo: 'El entorno de los casos, los más conectados primero', mixto: 'Mezcla: entorno de casos y más conectados', conectados: 'Los más conectados de la ciudad' };
 
 const PRESET_LABELS = {
-  doble: '×2 contagio',
-  mitad: '½ vacunas',
-  mercado: 'empieza en el mercado',
-  variante: 'la vacuna cubre a medias',
-  tarde: 'respuesta 10 días más tarde',
-  pobre: '½ presupuesto',
-  dengue: 'dengue de Manabí 2024 (calibrado con datos reales)',
+  doble: 'el doble de contagioso',
+  mitad: 'la mitad de vacunas',
+  mercado: 'empieza en otro mercado',
+  variante: 'la vacuna protege a medias',
+  tarde: 'se actúa 10 días tarde',
+  pobre: 'la mitad del presupuesto',
 };
 
 let chart = null;
 let busy = false;
 let previous = null; // último resultado, para mostrar qué cambió tras un Brote Sorpresa
+let scenario = 'zombi';
+const terms = () => TERMS[SCENARIOS[scenario].theme];
 const player = new CityPlayer(document.querySelector('.city'));
 
-// Modo Vecino: la ficha de la persona elegida se actualiza con el día de la animación.
+// ---------- Escenarios y ciudad ----------
+$('scenarios').innerHTML = Object.entries(SCENARIOS)
+  .map(([key, s]) => `<label class="scenario"><input type="radio" name="scenario" value="${key}"><b>${s.title}</b><span>${s.sub}</span></label>`)
+  .join('');
+
+function fillStart(city, value) {
+  const zones = CITIES[city].zones;
+  const options = [
+    ...zones.map((z) => [`mercado:${z}`, `Mercado de ${z}`]),
+    ...zones.map((z) => [`parroquia:${z}`, `En casas de ${z}`]),
+    ['colegio', 'En un colegio'],
+    ['aleatorio', 'En cualquier lugar (al azar)'],
+  ];
+  form.elements.start.innerHTML = options.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  form.elements.start.value = options.some(([v]) => v === value) ? value : options[0][0];
+}
+
+// Aplica una plantilla: valores de la ciudad (población, recursos) + los de la enfermedad.
+function applyScenario(key, keep = {}) {
+  scenario = key;
+  const s = SCENARIOS[key];
+  const city = s.config.city ?? form.elements.city.value ?? 'manta';
+  const base = makeConfig({ city });
+  setForm({ ...base, ...s.config, city, ...keep });
+  form.querySelector(`input[name="scenario"][value="${key}"]`).checked = true;
+  renderLegend();
+}
+
+function setForm(values) {
+  fillStart(values.city, values.start);
+  for (const name of FIELDS) if (name !== 'start') form.elements[name].value = values[name];
+  form.elements.vectorBorne.checked = values.vectorBorne === true;
+  updateOutputs();
+}
+
+function readForm() {
+  const cfg = {};
+  for (const name of FIELDS) {
+    const raw = form.elements[name].value;
+    cfg[name] = TEXT_FIELDS.has(name) ? raw : Number(raw);
+  }
+  cfg.vectorBorne = form.elements.vectorBorne.checked;
+  return cfg;
+}
+
+function updateOutputs() {
+  $('r0Out').textContent = Number(form.elements.r0.value).toFixed(1).replace('.', ',');
+  $('dosesOut').textContent = fmt(form.elements.dosesPerDay.value);
+  $('effOut').textContent = `${Math.round(form.elements.vaccineEfficacy.value * 100)} %`;
+}
+
+// Al cambiar de ciudad: sus valores por defecto de población, recursos y lugar de inicio.
+form.elements.city.addEventListener('change', () => {
+  const keep = readForm();
+  const base = makeConfig({ city: keep.city });
+  setForm({ ...keep, ...base, ...SCENARIOS[scenario].config, city: keep.city, seed: keep.seed, runs: keep.runs });
+});
+$('scenarios').addEventListener('change', (e) => {
+  const current = readForm();
+  applyScenario(e.target.value, { seed: current.seed, runs: current.runs });
+});
+
+function renderLegend() {
+  const T = terms();
+  const items = [['#3f7d58', T.S], ['#facc15', `${T.E} (el comité no lo ve)`], ['#ff3b3b', T.I], ['#60a5fa', T.R], ['#2dd4bf', 'Vacunado'], ['#c084fc', 'Hogar en cuarentena']];
+  $('legend').innerHTML = items.map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('') + '<span>Mercado / colegios cerrados y fumigación se anotan en el mapa</span>';
+  $('curveTitle').firstChild.textContent = `${T.active} por día `;
+  $('thInfected').textContent = `Personas ${T.bittenM}`;
+}
+
+const PRESETS = {
+  doble: (c) => ({ r0: Math.min(5, +(c.r0 * 2).toFixed(1)) }),
+  mitad: (c) => ({ dosesPerDay: Math.round(c.dosesPerDay / 2 / 250) * 250 }),
+  // Otro mercado: el siguiente de la lista de zonas de la ciudad.
+  mercado: (c) => {
+    const zones = CITIES[c.city].zones;
+    const now = zones.indexOf(c.start.split(':')[1]);
+    return { start: `mercado:${zones[(now + 1) % zones.length]}` };
+  },
+  variante: (c) => ({ vaccineEfficacy: +(c.vaccineEfficacy / 2).toFixed(2) }),
+  tarde: (c) => ({ responseStartDay: c.responseStartDay + 10, vaccineStartDay: c.vaccineStartDay + 10 }),
+  pobre: (c) => ({ budget: Math.round(c.budget / 2) }),
+};
+
+// ---------- Modo Vecino ----------
 const vecino = $('vecino');
 let neighbours = [];
 let nextNeighbour = 0;
 player.onSelect = (i) => {
-  renderVecino(vecino, player.trace, i, player.day);
+  renderVecino(vecino, player.trace, i, player.day, SCENARIOS[scenario].theme);
   vecino.hidden = false;
 };
 player.onDay = (day) => {
-  if (!vecino.hidden && player.selected >= 0) renderVecino(vecino, player.trace, player.selected, day);
+  if (!vecino.hidden && player.selected >= 0) renderVecino(vecino, player.trace, player.selected, day, SCENARIOS[scenario].theme);
 };
 vecino.addEventListener('click', (e) => {
   if (e.target.closest('.close')) {
@@ -60,39 +148,7 @@ $('meetBtn').addEventListener('click', () => {
   player.select(neighbours[nextNeighbour++ % neighbours.length]);
 });
 
-function setForm(values) {
-  for (const name of FIELDS) form.elements[name].value = values[name];
-  form.elements.vectorBorne.checked = values.vectorBorne === true;
-  updateOutputs();
-}
-
-function readForm() {
-  const cfg = {};
-  for (const name of FIELDS) {
-    const raw = form.elements[name].value;
-    cfg[name] = name === 'start' ? raw : Number(raw);
-  }
-  cfg.vectorBorne = form.elements.vectorBorne.checked;
-  return cfg;
-}
-
-function updateOutputs() {
-  $('r0Out').textContent = Number(form.elements.r0.value).toFixed(1);
-  $('dosesOut').textContent = fmt(form.elements.dosesPerDay.value);
-  $('effOut').textContent = `${Math.round(form.elements.vaccineEfficacy.value * 100)} %`;
-}
-
-const PRESETS = {
-  doble: (c) => ({ r0: Math.min(5, +(c.r0 * 2).toFixed(1)) }),
-  mitad: (c) => ({ dosesPerDay: Math.round(c.dosesPerDay / 2 / 250) * 250 }),
-  mercado: () => ({ start: 'mercado:Manta' }),
-  variante: (c) => ({ vaccineEfficacy: +(c.vaccineEfficacy / 2).toFixed(2) }),
-  tarde: (c) => ({ responseStartDay: c.responseStartDay + 10, vaccineStartDay: c.vaccineStartDay + 10 }),
-  pobre: (c) => ({ budget: Math.round(c.budget / 2) }),
-  // La transmisibilidad del dengue de Manabí 2024, calibrada con los datos del MSP, aplicada a Manta.
-  dengue: () => ({ r0: CALIBRATION.r0, ...DENGUE_PERIODS, days: 180, vectorBorne: true }),
-};
-
+// ---------- Simulación ----------
 function setBusy(on, text) {
   busy = on;
   $('runBtn').disabled = on;
@@ -122,7 +178,7 @@ function runLocal(config) {
 }
 
 async function runCloud(config) {
-  $('status').textContent = `Corriendo ${config.runs} simulaciones en AWS Lambda…`;
+  $('status').textContent = `Calculando ${config.runs} simulaciones en AWS Lambda…`;
   const res = await fetch(`${API_URL.replace(/\/$/, '')}/simulate`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -139,7 +195,7 @@ function loadCity(s) {
   worker.onmessage = ({ data }) => {
     worker.terminate();
     if (data.type !== 'trace') return;
-    player.load(data.trace, s.config, s.runs);
+    player.load(data.trace, s.config, s.runs, terms());
     vecino.hidden = true;
     neighbours = interestingPeople(data.trace);
     nextNeighbour = 0;
@@ -153,6 +209,7 @@ const policyText = (p) =>
 
 function showChanges(before, after, label) {
   const box = $('changes');
+  const T = terms();
   const row = (title, a, b) => `<div><span>${title}</span><strong>${a} → ${b}</strong></div>`;
   const changes = [];
   const p0 = before.policy, p1 = after.policy;
@@ -160,13 +217,13 @@ function showChanges(before, after, label) {
   if (p0.quarantine !== p1.quarantine) changes.push(p1.quarantine ? 'Ahora sí conviene aislar los hogares de los casos.' : 'Ya no conviene gastar en cuarentenas.');
   if (p0.closures !== p1.closures) changes.push(p1.closures ? 'Ahora sí conviene cerrar mercados o colegios donde haya casos.' : 'Ya no conviene cerrar mercados ni colegios: el dinero rinde más en otra cosa.');
   if ((p0.reserve ?? 0) !== (p1.reserve ?? 0)) changes.push(`Reserva de presupuesto: de ${Math.round((p0.reserve ?? 0) * 100)} % a ${Math.round((p1.reserve ?? 0) * 100)} %.`);
-  if (!!p0.fumigation !== !!p1.fumigation) changes.push(p1.fumigation ? 'Ahora conviene enviar brigadas de fumigación a las parroquias con casos.' : 'Ya no conviene fumigar.');
-  if (!changes.length) changes.push(`La misma política sigue siendo la mejor (${policyText(p1)}).`);
+  if (!!p0.fumigation !== !!p1.fumigation) changes.push(p1.fumigation ? 'Ahora conviene enviar brigadas de fumigación a las zonas con casos.' : 'Ya no conviene fumigar.');
+  if (!changes.length) changes.push(`El mismo plan sigue siendo el mejor (${policyText(p1)}).`);
   box.innerHTML =
-    `<h3>🎃 Brote Sorpresa: ${label}. La estrategia se volvió a optimizar.</h3>` +
+    `<h3>Brote sorpresa: ${label}. El plan se volvió a calcular.</h3>` +
     `<div class="delta">` +
-    row('Mordidos con la estrategia', fmt(before.strategies.adaptativa.infected.mean), fmt(after.strategies.adaptativa.infected.mean)) +
-    row('Salvados vs no hacer nada', fmt(before.savedVsNone.mean), fmt(after.savedVsNone.mean)) +
+    row(`Personas ${T.bittenM} con el plan`, fmt(before.strategies.adaptativa.infected.mean), fmt(after.strategies.adaptativa.infected.mean)) +
+    row('Protegidas frente a no hacer nada', fmt(before.savedVsNone.mean), fmt(after.savedVsNone.mean)) +
     row('Gana al azar', `${Math.round(before.winRateVsRandom * 100)} %`, `${Math.round(after.winRateVsRandom * 100)} %`) +
     row('Costo', usd(before.strategies.adaptativa.spent.mean), usd(after.strategies.adaptativa.spent.mean)) +
     `</div><ul>${changes.map((c) => `<li>${c}</li>`).join('')}</ul>`;
@@ -194,9 +251,21 @@ async function simulate(surprise = null) {
 }
 
 function render(s, seconds) {
+  const T = terms();
+  const sc = SCENARIOS[scenario];
+  const city = CITIES[s.config.city];
   const where = s.engine === 'aws' ? 'en AWS Lambda' : 'en este navegador';
   $('status').textContent = `Listo: ${s.runs} simulaciones ${where} en ${seconds.toFixed(1)} s.`;
+
+  // Plan recomendado: los pasos del informe, en lenguaje simple.
+  const report = mayorReport(s, { theme: sc.theme, disease: sc.disease });
+  const lines = report.split('\n');
+  const from = lines.indexOf('QUÉ HACER') + 1;
+  const to = lines.indexOf('', from);
+  $('planTitle').textContent = `Plan recomendado · ${city.name}`;
   $('headline').textContent = headline(s);
+  $('planSteps').innerHTML = lines.slice(from, to).map((l) => `<li>${l.replace(/^\d+\.\s*/, '')}</li>`).join('');
+  $('planCard').hidden = false;
   renderVerdict(s);
 
   $('kSavedNone').textContent = fmt(s.savedVsNone.mean);
@@ -204,9 +273,9 @@ function render(s, seconds) {
   $('kSavedRandom').textContent = fmt(s.savedVsRandom.mean);
   $('kSavedRandomRange').textContent = `rango ${fmt(s.savedVsRandom.p5)} a ${fmt(s.savedVsRandom.p95)}`;
   $('kWin').textContent = s.takeoffRuns ? `${Math.round(s.winRateVsRandom * 100)} %` : '—';
-  $('kWinNote').textContent = `${s.takeoffRuns} de ${s.runs} brotes despegaron; pierde en ${Math.round(s.lossRateVsRandom * 100)} %`;
+  $('kWinNote').textContent = `${s.takeoffRuns} de ${s.runs} brotes crecieron; pierde en ${Math.round(s.lossRateVsRandom * 100)} %`;
   $('kCost').textContent = usd(s.strategies.adaptativa.spent.mean);
-  $('kCostNote').textContent = `presupuesto ${usd(s.config.budget)}`;
+  $('kCostNote').textContent = `de un presupuesto de ${usd(s.config.budget)}`;
 
   const tbody = $('compare').querySelector('tbody');
   tbody.innerHTML = '';
@@ -223,9 +292,9 @@ function render(s, seconds) {
   }
   const a = s.strategies.adaptativa;
   $('wasted').textContent =
-    `Vacunas a casos ya reportados: ${a.wastedVisible} (siempre 0). Dosis que cayeron en mordidos sin síntomas o casos sin reportar: ${fmt(a.wastedHidden.mean)} en promedio; nadie puede distinguirlos de un sano.`;
+    `Vacunas a casos ya reportados: ${a.wastedVisible} (siempre 0). Dosis que cayeron en personas ${T.bittenM} sin síntomas o casos sin reportar: ${fmt(a.wastedHidden.mean)} en promedio; nadie puede distinguirlas de una persona sana.`;
 
-  $('report').textContent = mayorReport(s);
+  $('report').textContent = report;
 
   $('nPolicies').textContent = s.ranking.length;
   const rtbody = $('ranking').querySelector('tbody');
@@ -243,8 +312,8 @@ function render(s, seconds) {
   });
 
   $('footer').textContent =
-    `Semilla ${s.config.seed} · huella de configuración ${s.configHash} · 1 agente = ${s.scale.toFixed(1)} habitantes reales de Manta · ` +
-    `misma semilla y configuración = mismo resultado.`;
+    `${city.name}: ${fmt(s.config.realPopulation)} habitantes urbanos · semilla ${s.config.seed} · huella ${s.configHash} · ` +
+    `cada persona simulada representa a ${fmt(s.scale)} habitantes · misma semilla y datos = mismo resultado.`;
 
   drawChart(s);
 }
@@ -258,12 +327,13 @@ function renderVerdict(s) {
   }
   const pText = (p) => (p < 0.001 ? 'p < 0,001' : `p = ${p.toFixed(3).replace('.', ',')}`);
   const line = (v, name) =>
-    `<div class="${v.passed ? 'ok' : 'ko'}">${v.passed ? '✅' : '❌'} ${v.passed ? 'Supera' : 'No se puede afirmar que supere'} a <b>${name}</b>: ` +
-    `gana ${v.wins}, pierde ${v.losses}, empata ${v.ties} de ${s.takeoffRuns} brotes que despegan (prueba de signos, ${pText(v.p)}).</div>`;
-  box.innerHTML = line(s.verdictVsNone, 'no hacer nada') + line(s.verdictVsRandom, 'actuar al azar con los mismos recursos');
+    `<div class="${v.passed ? 'ok' : 'ko'}"><b>${v.passed ? 'Supera' : 'No se puede afirmar que supere'}</b> a ${name}: ` +
+    `gana ${v.wins}, pierde ${v.losses} y empata ${v.ties} de ${s.takeoffRuns} brotes que crecieron (prueba de signos, ${pText(v.p)}).</div>`;
+  box.innerHTML = line(s.verdictVsNone, 'no hacer nada') + line(s.verdictVsRandom, 'repartir los mismos recursos al azar');
   box.hidden = false;
 }
 
+const AXIS = { ticks: { color: '#98a2ae' }, grid: { color: '#222831' } };
 function drawChart(s) {
   if (!window.Chart) return;
   const labels = s.strategies.nada.curve.mean.map((_, d) => d);
@@ -272,8 +342,8 @@ function drawChart(s) {
     const c = s.strategies[key].curve;
     datasets.push(
       { label: `${LABELS[key]} (p95)`, data: c.p95, borderWidth: 0, pointRadius: 0, fill: false, borderColor: 'transparent' },
-      { label: `${LABELS[key]} (p5)`, data: c.p5, borderWidth: 0, pointRadius: 0, fill: '-1', backgroundColor: `${COLORS[key]}22`, borderColor: 'transparent' },
-      { label: LABELS[key], data: c.mean, borderColor: COLORS[key], borderWidth: 2.5, pointRadius: 0, fill: false },
+      { label: `${LABELS[key]} (p5)`, data: c.p5, borderWidth: 0, pointRadius: 0, fill: '-1', backgroundColor: `${COLORS[key]}1f`, borderColor: 'transparent' },
+      { label: LABELS[key], data: c.mean, borderColor: COLORS[key], borderWidth: 2.2, pointRadius: 0, fill: false },
     );
   }
   if (chart) chart.destroy();
@@ -286,11 +356,11 @@ function drawChart(s) {
       animation: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { title: { display: true, text: 'Día', color: '#a99fd1' }, ticks: { color: '#a99fd1', maxTicksLimit: 12 }, grid: { color: '#2a2250' } },
-        y: { title: { display: true, text: 'Zombis activos (personas)', color: '#a99fd1' }, ticks: { color: '#a99fd1' }, grid: { color: '#2a2250' } },
+        x: { ...AXIS, title: { display: true, text: 'Día', color: '#98a2ae' }, ticks: { ...AXIS.ticks, maxTicksLimit: 12 } },
+        y: { ...AXIS, title: { display: true, text: `${terms().active} (personas)`, color: '#98a2ae' } },
       },
       plugins: {
-        legend: { labels: { color: '#ece8ff', filter: (item) => !item.text.includes('(p') } },
+        legend: { labels: { color: '#e7eaee', boxWidth: 14, filter: (item) => !item.text.includes('(p') } },
         tooltip: { filter: (item) => !item.dataset.label.includes('(p'), callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
       },
     },
@@ -305,8 +375,8 @@ function drawCalibration() {
     data: {
       labels: c.observed.map((_, w) => `SE ${w + 1}`),
       datasets: [
-        { type: 'bar', label: 'Casos reales (MSP)', data: c.observed, backgroundColor: '#ff8a3d99', borderWidth: 0 },
-        { type: 'line', label: 'Modelo calibrado', data: c.model, borderColor: '#2dd4bf', borderWidth: 2.5, pointRadius: 0 },
+        { type: 'bar', label: 'Casos reales (MSP)', data: c.observed, backgroundColor: '#f2b33d99', borderWidth: 0 },
+        { type: 'line', label: 'Modelo calibrado', data: c.model, borderColor: '#3b9eff', borderWidth: 2.2, pointRadius: 0 },
       ],
     },
     options: {
@@ -315,17 +385,17 @@ function drawCalibration() {
       animation: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { ticks: { color: '#a99fd1', maxTicksLimit: 13 }, grid: { color: '#2a2250' } },
-        y: { title: { display: true, text: 'Casos reportados por semana', color: '#a99fd1' }, ticks: { color: '#a99fd1' }, grid: { color: '#2a2250' } },
+        x: { ...AXIS, ticks: { ...AXIS.ticks, maxTicksLimit: 13 } },
+        y: { ...AXIS, title: { display: true, text: 'Casos reportados por semana', color: '#98a2ae' } },
       },
-      plugins: { legend: { labels: { color: '#ece8ff' } } },
+      plugins: { legend: { labels: { color: '#e7eaee' } } },
     },
   });
   $('calibNote').innerHTML =
     `El mismo motor, sin intervenciones, ajustado a los ${fmt(c.observed.reduce((a, b) => a + b, 0))} casos de 2024 del ` +
     `<a href="${DENGUE_MANABI_2024.url}" target="_blank" rel="noopener">Ministerio de Salud Pública</a>: ` +
-    `R0 efectivo <b>${c.r0}</b>, se reporta el <b>${(c.reportedFraction * 100).toFixed(1)} %</b> de las infecciones, ` +
-    `R² = <b>${c.r2}</b>. El botón 🦟 aplica esta plaga calibrada a Manta. Detalle y límites en docs/calibracion.md.`;
+    `cada caso contagia a <b>${String(c.r0).replace('.', ',')}</b> personas, se reporta el <b>${(c.reportedFraction * 100).toFixed(1).replace('.', ',')} %</b> de las infecciones y ` +
+    `R² = <b>${String(c.r2).replace('.', ',')}</b>. Las plantillas "Dengue" y "El Niño 2026" usan este contagio. Detalle y límites en docs/calibracion.md.`;
 }
 
 form.addEventListener('input', updateOutputs);
@@ -334,12 +404,15 @@ form.addEventListener('submit', (e) => {
   simulate();
 });
 form.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter' && e.target.tagName === 'INPUT') {
+  if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.type !== 'radio') {
     e.preventDefault();
     simulate();
   }
 });
-$('resetBtn').addEventListener('click', () => setForm(DEFAULTS));
+$('resetBtn').addEventListener('click', () => {
+  const current = readForm();
+  applyScenario(scenario, { seed: current.seed, runs: current.runs });
+});
 $('copyBtn').addEventListener('click', () => navigator.clipboard?.writeText($('report').textContent));
 for (const button of document.querySelectorAll('[data-preset]')) {
   button.addEventListener('click', () => {
@@ -350,6 +423,6 @@ for (const button of document.querySelectorAll('[data-preset]')) {
 }
 
 if (API_URL) $('cloudRow').hidden = false;
-setForm(DEFAULTS);
+applyScenario('zombi', { runs: 100 });
 if (window.Chart) drawCalibration();
 else window.addEventListener('load', drawCalibration);

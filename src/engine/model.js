@@ -1,7 +1,7 @@
 // Simulación SEIR estocástica basada en agentes sobre la red de contactos por capas.
 // Estados: 0 Sano (S) · 1 Mordido (E, oculto) · 2 Zombi (I, visible) · 3 Exorcizado (R, recuperado o inmune)
 import { Rng, hashSeed, expNeg } from './rng.js';
-import { PARROQUIAS, scaleOf } from './config.js';
+import { scaleOf } from './config.js';
 import { LAYERS, HOME } from './population.js';
 
 export const S = 0, E = 1, I = 2, R = 3;
@@ -59,7 +59,7 @@ function pickInitial(pop, cfg, rng) {
   if (cfg.start === 'aleatorio') pool = [...Array(N).keys()];
   else if (cfg.start === 'colegio') pool = [...Array(N).keys()].filter((i) => pop.layerPlace[COLEGIO][i] >= 0);
   else {
-    const p = PARROQUIAS.indexOf(cfg.start.split(':')[1]);
+    const p = pop.names.indexOf(cfg.start.split(':')[1]);
     pool = [...Array(N).keys()].filter((i) => pop.parroquia[i] === p);
   }
   const chosen = [];
@@ -86,7 +86,7 @@ function pickInitial(pop, cfg, rng) {
 export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy = DEFAULT_POLICY, trace = false) {
   const N = pop.N;
   const D = cfg.days;
-  const P = PARROQUIAS.length;
+  const P = pop.names.length;
   const L = LAYERS.length;
   const H = pop.households;
   const scale = scaleOf(cfg);
@@ -222,7 +222,7 @@ export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy 
 
   const fumigate = (p, d) => {
     fumigatedUntil[p] = d + cfg.fumigationDays - 1;
-    fumigations.push({ parroquia: PARROQUIAS[p], day: d });
+    fumigations.push({ parroquia: pop.names[p], day: d });
     spent += costPerFumigation;
   };
 
@@ -234,7 +234,7 @@ export function simulateRun(pop, cfg, strategy, runSeed, matched = null, policy 
 
   const closePlace = (layer, p, d) => {
     closedUntil[CLOSABLE.indexOf(layer)][p] = d + cfg.closeDays - 1;
-    closures.push({ layer: LAYERS[layer], parroquia: PARROQUIAS[p], day: d });
+    closures.push({ layer: LAYERS[layer], parroquia: pop.names[p], day: d });
     spent += costPerClosure;
   };
 

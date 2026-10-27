@@ -3,7 +3,7 @@
 // el paciente cero y por qué el Comité la vacunó. Nombres, edades y oficios son ILUSTRATIVOS (se generan
 // con la semilla); hogar, rutina, contagios y vacunas salen de la simulación.
 import { hashSeed, Rng } from './engine/rng.js';
-import { PARROQUIAS } from './engine/config.js';
+import { CITIES } from './engine/cities.js';
 
 const FEMALE = ['María', 'Ana', 'Rosa', 'Carmen', 'Jessenia', 'Lucía', 'Valeria', 'Gabriela', 'Mercedes', 'Dayana', 'Fernanda', 'Narcisa', 'Paola', 'Camila', 'Johanna', 'Mayra', 'Luz', 'Betty', 'Doménica', 'Kerly'];
 const MALE = ['José', 'Carlos', 'Luis', 'Jorge', 'Byron', 'Andrés', 'Javier', 'Washington', 'Kevin', 'Steven', 'Ramón', 'Pedro', 'Jefferson', 'Mateo', 'Holger', 'Ángel', 'Bryan', 'Marlon', 'Segundo', 'Fabricio'];
@@ -14,22 +14,31 @@ const JOBS = [
   ['vendedora en el puerto', 'vendedor en el puerto'], ['oficinista', 'oficinista'], ['guardia', 'guardia'],
   ['costurera', 'mecánico'], ['cajera', 'albañil'],
 ];
+// Nombre de la zona de la persona i en la ciudad de la animación.
+let zoneNames = CITIES.manta.zones;
+const zone = (p, i) => zoneNames[p.parroquia[i]];
 const PLACE = {
   0: () => 'en su casa',
   1: () => 'en el colegio',
   2: () => 'en el trabajo',
   3: (p, i) => `en el bus (línea ${p.bus[i] + 1})`,
-  4: (p, i) => `en el mercado de ${PARROQUIAS[p.parroquia[i]]}`,
-  5: (p, i) => `en el barrio (${PARROQUIAS[p.parroquia[i]]})`,
+  4: (p, i) => `en el mercado de ${zone(p, i)}`,
+  5: (p, i) => `en el barrio (${zone(p, i)})`,
 };
+// Vocabulario: "mordida" en la demo zombi, "contagiada" en un brote real.
+let real = false;
+const bitten = (who) => (real ? (who.female ? 'Contagiada' : 'Contagiado') : who.female ? 'Mordida' : 'Mordido');
 const STRATS = [
   ['nada', 'Si nadie hace nada'],
   ['azar', 'Si se actúa al azar'],
-  ['adaptativa', 'Con la estrategia del Comité'],
+  ['adaptativa', 'Con el plan del Comité'],
 ];
 // Color del "plumbob" (el rombo de los Sims) según el estado del día en la realidad del Comité.
 const STATE_COLOR = ['#4ade80', '#facc15', '#ff3b3b', '#60a5fa', '#2dd4bf'];
-const STATE_TEXT = [['Sana', 'Sano'], ['Mordida (aún no se nota)', 'Mordido (aún no se nota)'], ['Zombi', 'Zombi'], ['Exorcizada (recuperada)', 'Exorcizado (recuperado)'], ['Vacunada y protegida', 'Vacunado y protegido']];
+const STATE_TEXT = {
+  zombi: [['Sana', 'Sano'], ['Mordida (aún no se nota)', 'Mordido (aún no se nota)'], ['Zombi', 'Zombi'], ['Exorcizada (recuperada)', 'Exorcizado (recuperado)'], ['Vacunada y protegida', 'Vacunado y protegido']],
+  real: [['Sana', 'Sano'], ['Contagiada sin síntomas', 'Contagiado sin síntomas'], ['Contagiosa', 'Contagioso'], ['Recuperada', 'Recuperado'], ['Vacunada y protegida', 'Vacunado y protegido']],
+};
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
 
@@ -67,16 +76,17 @@ function fate(trace, strategy, i) {
   const day = s.infectedDay[i];
   const vax = s.vaccinatedDay[i];
   const who = persona(trace, i);
-  if (day === 0) return { icon: '🧟', cls: 'z', text: `Es el paciente cero: el brote empieza con ${a(who, 'ella', 'él')}.` };
+  if (day === 0) return { cls: 'z', text: `Es el paciente cero: el brote empieza con ${a(who, 'ella', 'él')}.` };
   if (day > 0) {
     const by = s.infectedBy[i];
     const place = PLACE[s.infectedLayer[i]](p, i);
     const biter = by >= 0 ? ` por ${persona(trace, by).name}` : '';
-    const vaxNote = vax >= 0 && vax < day ? ` Se vacunó el día ${vax}, pero la vacuna no le hizo efecto.` : vax >= 0 ? ` La vacunaron el día ${vax}, cuando ya estaba ${a(who, 'mordida', 'mordido')} sin saberlo.` : '';
-    return { icon: '🔴', cls: 'z', text: `${a(who, 'Mordida', 'Mordido')} el día ${day} ${place}${biter}.${vaxNote}` };
+    const vaxNote = vax >= 0 && vax < day ? ` Se vacunó el día ${vax}, pero la vacuna no le hizo efecto.` : vax >= 0 ? ` La vacunaron el día ${vax}, cuando ya estaba ${bitten(who).toLowerCase()} sin saberlo.` : '';
+    return { cls: 'z', text: `${bitten(who)} el día ${day} ${place}${biter}.${vaxNote}` };
   }
-  if (vax >= 0) return { icon: '💉', cls: 'v', text: `${a(who, 'Vacunada', 'Vacunado')} el día ${vax}. Nunca ${a(who, 'la', 'lo')} mordieron.` };
-  return { icon: '🟢', cls: 's', text: `Nunca ${a(who, 'la', 'lo')} mordieron.` };
+  const never = real ? 'Nunca se contagió.' : `Nunca ${a(who, 'la', 'lo')} mordieron.`;
+  if (vax >= 0) return { cls: 'v', text: `${a(who, 'Vacunada', 'Vacunado')} el día ${vax}. ${never}` };
+  return { cls: 's', text: never };
 }
 
 function chain(trace, strategy, i, max = 12) {
@@ -121,21 +131,23 @@ export function interestingPeople(trace) {
   return list.slice(0, 60).map((x) => x.i);
 }
 
-export function renderVecino(el, trace, i, day) {
+export function renderVecino(el, trace, i, day, theme = 'zombi') {
+  real = theme === 'real';
+  zoneNames = CITIES[trace.city].zones;
   const p = trace.people;
   const who = persona(trace, i);
   const code = trace.adaptativa.frames[day * trace.N + i] & 7;
-  const routine = [`🏠 Casa en ${PARROQUIAS[p.parroquia[i]]} · ${p.homeSize[i] === 1 ? a(who, 'vive sola', 'vive solo') : `vive con ${p.homeSize[i] - 1} ${p.homeSize[i] === 2 ? 'persona' : 'personas'}`}`];
-  if (p.bus[i] >= 0) routine.push(`🚌 Bus línea ${p.bus[i] + 1}`);
-  if (p.colegio[i] >= 0) routine.push(`🏫 Colegio de ${PARROQUIAS[p.parroquia[i]]}`);
-  if (p.trabajo[i] >= 0) routine.push(`🏭 Trabajo en ${PARROQUIAS[p.parroquia[i]]}`);
-  routine.push(`🛒 Mercado de ${PARROQUIAS[p.parroquia[i]]}`);
+  const routine = [`Casa en ${zone(p, i)} · ${p.homeSize[i] === 1 ? a(who, 'vive sola', 'vive solo') : `vive con ${p.homeSize[i] - 1} ${p.homeSize[i] === 2 ? 'persona' : 'personas'}`}`];
+  if (p.bus[i] >= 0) routine.push(`bus línea ${p.bus[i] + 1}`);
+  if (p.colegio[i] >= 0) routine.push(`colegio en ${zone(p, i)}`);
+  if (p.trabajo[i] >= 0) routine.push(`trabajo en ${zone(p, i)}`);
+  routine.push(`mercado de ${zone(p, i)}`);
   const maxC = 40;
   const contacts = p.connectivity[i];
 
   const fates = STRATS.map(([k, label]) => {
     const f = fate(trace, k, i);
-    return `<li class="${k}"><span class="fate-label">${label}</span><span class="fate ${f.cls}">${f.icon} ${esc(f.text)}</span></li>`;
+    return `<li class="${k}"><span class="fate-label">${label}</span><span class="fate ${f.cls}">${esc(f.text)}</span></li>`;
   }).join('');
 
   const ch = chain(trace, 'nada', i);
@@ -149,23 +161,23 @@ export function renderVecino(el, trace, i, day) {
       return `<li><button type="button" class="link" data-person="${k}">${pk.avatar} ${esc(pk.name)}</button> <small>${esc(where)}</small>${idx === 0 ? ' <b>← aquí</b>' : ''}</li>`;
     }).join('');
     const tail = ch.complete ? '' : '<li><small>… (la cadena sigue)</small></li>';
-    chainHtml = `<h4>🧬 Cadena de contagio si nadie hace nada <small>(de ${a(who, 'ella', 'él')} hacia el paciente cero)</small></h4><ol class="chain">${rows}${tail}</ol>`;
+    chainHtml = `<h4>Cadena de contagio si nadie hace nada <small>(de ${a(who, 'ella', 'él')} hacia el paciente cero)</small></h4><ol class="chain">${rows}${tail}</ol>`;
   }
   const why = whyVaccinated(trace, i, who);
   el.innerHTML = `
     <button type="button" class="close" aria-label="Cerrar">✕</button>
     <div class="vecino-head">
-      <div class="avatar"><span class="plumbob" style="--c:${STATE_COLOR[code] ?? '#4ade80'}" title="Hoy, con el Comité: ${STATE_TEXT[code][who.female ? 0 : 1]}"></span>${who.avatar}</div>
+      <div class="avatar"><span class="plumbob" style="--c:${STATE_COLOR[code] ?? '#4ade80'}" title="Hoy, con el plan: ${STATE_TEXT[theme][code][who.female ? 0 : 1]}"></span>${who.avatar}</div>
       <div>
         <h3>${esc(who.name)} <small>${who.age} años</small></h3>
-        <p class="muted">${esc(who.what)} · hoy (día ${day}, con el Comité): <b style="color:${STATE_COLOR[code]}">${STATE_TEXT[code][who.female ? 0 : 1]}</b></p>
+        <p class="muted">${esc(who.what)} · día ${day}, con el plan: <b style="color:${STATE_COLOR[code]}">${STATE_TEXT[theme][code][who.female ? 0 : 1]}</b></p>
         <div class="need"><span>Contactos al día</span><i><b style="width:${Math.min(100, (contacts / maxC) * 100)}%"></b></i><em>${Math.round(contacts)}</em></div>
       </div>
     </div>
     <p class="routine">${routine.map(esc).join(' <span>→</span> ')}</p>
-    <h4>🔮 Su destino en las tres realidades <small>(el mismo brote)</small></h4>
+    <h4>Qué le pasa en cada caso <small>(el mismo brote)</small></h4>
     <ul class="fates">${fates}</ul>
-    ${why ? `<h4>💉 ¿Por qué ${a(who, 'la', 'lo')} vacunó el Comité?</h4><p>${esc(why)}</p>` : ''}
+    ${why ? `<h4>Por qué ${a(who, 'la', 'lo')} vacunó el Comité</h4><p>${esc(why)}</p>` : ''}
     ${chainHtml}
     <p class="hint">Nombres, edades y oficios son ilustrativos. Hogar, rutina, contagios y vacunas salen de la simulación.</p>`;
 }

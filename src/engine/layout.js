@@ -1,22 +1,21 @@
-// Posición de cada persona para la animación "La ciudad en vivo", sobre el mapa REAL de Manta.
-// Cada hogar cae dentro de los límites oficiales de su parroquia (OpenStreetMap) y con más probabilidad
+// Posición de cada persona para la animación "La ciudad en vivo", sobre el mapa REAL de la ciudad.
+// Cada hogar cae dentro de los límites oficiales de su zona (OpenStreetMap) y con más probabilidad
 // donde hay más edificios y calles; sus miembros quedan agrupados alrededor. Coordenadas en [0, 1] del mapa.
 import { Rng, hashSeed } from './rng.js';
 import { HOME } from './population.js';
-import { PARROQUIAS } from './config.js';
-import { MAP, PARROQUIA_SHAPES } from './manta-map.js';
-
-export const ASPECT = MAP.aspect;
+import { CITIES } from './cities.js';
 
 const decode = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 
-// Celdas habitadas de cada parroquia con su peso acumulado (para sortear dónde vive cada hogar).
-let cells = null;
-function parroquiaCells() {
-  if (cells) return cells;
-  const owner = decode(MAP.owner);
-  const weight = decode(MAP.weight);
-  cells = PARROQUIAS.map(() => ({ index: [], cumulative: [], total: 0 }));
+// Por ciudad: celdas habitadas de cada zona con su peso acumulado (para sortear dónde vive cada hogar)
+// y el centro de cada zona (para las etiquetas). Se calcula una vez.
+const cache = {};
+function cityCells(cityId) {
+  if (cache[cityId]) return cache[cityId];
+  const { map, zones } = CITIES[cityId];
+  const owner = decode(map.owner);
+  const weight = decode(map.weight);
+  const cells = zones.map(() => ({ index: [], cumulative: [], total: 0 }));
   for (let i = 0; i < owner.length; i++) {
     if (owner[i] === 255 || weight[i] === 0) continue;
     const c = cells[owner[i]];
@@ -24,22 +23,25 @@ function parroquiaCells() {
     c.index.push(i);
     c.cumulative.push(c.total);
   }
-  return cells;
+  // Centro ponderado por densidad (el nombre queda sobre la zona poblada) y un radio aproximado
+  // en fracción del ancho, para ubicar los avisos de cierres y fumigación.
+  const regions = zones.map((name, k) => {
+    const c = cells[k];
+    let sx = 0;
+    let sy = 0;
+    for (let j = 0; j < c.index.length; j++) {
+      const w = c.cumulative[j] - (j ? c.cumulative[j - 1] : 0);
+      sx += ((c.index[j] % map.gridW) + 0.5) * w;
+      sy += (Math.floor(c.index[j] / map.gridW) + 0.5) * w;
+    }
+    return { name, x: sx / c.total / map.gridW, y: sy / c.total / map.gridH, r: Math.sqrt(c.index.length / Math.PI) / map.gridW / 2 };
+  });
+  cache[cityId] = { cells, regions };
+  return cache[cityId];
 }
 
-// Centro de cada parroquia (ponderado por densidad, para que el nombre quede sobre la zona poblada)
-// y un radio aproximado en fracción del ancho, para ubicar etiquetas de cierres y fumigación.
-export const REGIONS = PARROQUIAS.map((name, k) => {
-  const c = parroquiaCells()[k];
-  let sx = 0;
-  let sy = 0;
-  for (let j = 0; j < c.index.length; j++) {
-    const w = c.cumulative[j] - (j ? c.cumulative[j - 1] : 0);
-    sx += ((c.index[j] % MAP.gridW) + 0.5) * w;
-    sy += (Math.floor(c.index[j] / MAP.gridW) + 0.5) * w;
-  }
-  return { name, x: sx / c.total / MAP.gridW, y: sy / c.total / MAP.gridH, r: Math.sqrt(c.index.length / Math.PI) / MAP.gridW / 2 };
-});
+export const regionsOf = (cityId) => cityCells(cityId).regions;
+export const REGIONS = regionsOf('manta');
 
 function pickCell(c, u) {
   const target = u * c.total;
@@ -54,22 +56,25 @@ function pickCell(c, u) {
 }
 
 export function cityLayout(pop, seed) {
+  const { map, shapes, water } = CITIES[pop.city];
+  const { cells, regions } = cityCells(pop.city);
   const rng = new Rng(hashSeed(seed, 'mapa'));
-  const all = parroquiaCells();
   const N = pop.N;
   const x = new Float32Array(N);
   const y = new Float32Array(N);
   const home = pop.layerPlace[HOME];
   const centers = new Map();
+  // Dispersión de los miembros del hogar: ~25 m, igual en ancho y alto.
+  const spread = 0.33 / map.gridW;
   for (let i = 0; i < N; i++) {
     let c = centers.get(home[i]);
     if (!c) {
-      const cell = pickCell(all[pop.parroquia[i]], rng.next());
-      c = { x: ((cell % MAP.gridW) + rng.next()) / MAP.gridW, y: (Math.floor(cell / MAP.gridW) + rng.next()) / MAP.gridH };
+      const cell = pickCell(cells[pop.parroquia[i]], rng.next());
+      c = { x: ((cell % map.gridW) + rng.next()) / map.gridW, y: (Math.floor(cell / map.gridW) + rng.next()) / map.gridH };
       centers.set(home[i], c);
     }
-    x[i] = c.x + (rng.next() - 0.5) * 0.003;
-    y[i] = c.y + (rng.next() - 0.5) * 0.003 * ASPECT;
+    x[i] = c.x + (rng.next() - 0.5) * spread;
+    y[i] = c.y + (rng.next() - 0.5) * spread * map.aspect;
   }
-  return { x, y, regions: REGIONS, aspect: ASPECT, image: MAP.image, attribution: MAP.attribution, shapes: PARROQUIA_SHAPES };
+  return { x, y, regions, aspect: map.aspect, image: map.image, attribution: map.attribution, shapes, water };
 }

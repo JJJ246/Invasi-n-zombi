@@ -3,5 +3,6 @@ export { DEFAULTS, PARROQUIAS, makeConfig, configHash, scaleOf } from './config.
 export { buildPopulation, LAYERS } from './population.js';
 export { simulateRun, STRATEGIES, DEFAULT_POLICY } from './model.js';
 export { runBatch, aggregate, optimizePolicy, runMonteCarlo, traceRun, CANDIDATE_POLICIES, candidatePolicies } from './montecarlo.js';
-export { cityLayout, REGIONS } from './layout.js';
+export { cityLayout, REGIONS, regionsOf } from './layout.js';
+export { CITIES, cityOf, zonesOf } from './cities.js';
 export { headline, mayorReport } from './report.js';
