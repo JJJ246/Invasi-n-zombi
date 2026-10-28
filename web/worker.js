@@ -7,7 +7,7 @@ function simulate(config) {
   const cfg = makeConfig(config);
   const pop = buildPopulation(cfg);
   self.postMessage({ type: 'progress', value: 0, text: `Optimizando la estrategia (${candidatePolicies(cfg).length} políticas candidatas)…` });
-  const optimization = optimizePolicy(cfg, pop);
+  const optimization = optimizePolicy(cfg, pop, (result, k, n) => self.postMessage({ type: 'policy', k, n, result }));
 
   const runs = [];
   for (let from = 0; from < cfg.runs; from += CHUNK) {

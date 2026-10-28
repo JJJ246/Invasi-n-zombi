@@ -376,3 +376,17 @@ button.link { display: inline; background: none; border: 0; padding: 0; color: v
 
 .barrio-name img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; margin-bottom: 0.3rem; }
 .barrio-name .credit { display: block; margin: -0.15rem 0 0.25rem; font-size: 0.62rem; color: var(--muted); }
+
+/* Los 21 planes candidatos mientras el Comité optimiza */
+.policies { display: grid; grid-template-columns: repeat(7, 92px); gap: 8px; margin-top: 0.6rem; }
+.pol { display: grid; justify-items: center; gap: 3px; padding: 0.45rem 0.3rem; border: 1px dashed var(--line); border-radius: 10px; background: #140c1ccc; opacity: 0.35; font-size: 0.72rem; color: var(--muted); }
+.pol b { font: 0.7rem var(--type); }
+.pol.done { opacity: 1; border-style: solid; animation: pol-in 0.45s cubic-bezier(.2, .9, .3, 1.4) both; }
+@keyframes pol-in { from { transform: rotateY(90deg) scale(0.8); } }
+.pol .pol-ic { display: flex; gap: 3px; color: var(--accent-2); }
+.pol .pol-ic .ic { width: 14px; height: 14px; }
+.pol .pol-ic .ic.off { opacity: 0.2; }
+.pol em { font-style: normal; font-weight: 800; color: var(--text); font-variant-numeric: tabular-nums; }
+.pol.best { border-color: var(--good); background: #15280fdd; box-shadow: 0 0 18px #8be04e66; }
+.pol.best em { color: var(--good); }
+@media (max-width: 760px) { .policies { grid-template-columns: repeat(4, 72px); } }

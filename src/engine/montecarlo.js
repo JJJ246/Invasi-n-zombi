@@ -30,10 +30,12 @@ export function candidatePolicies(cfg) {
 // Optimizador: prueba cada política en corridas de ENTRENAMIENTO (semillas distintas a las de
 // evaluación, para no "hacer trampa") y elige la que deja menos personas mordidas en promedio.
 // Desempate: la más barata. Si el jurado cambia las condiciones, se vuelve a optimizar.
-export function optimizePolicy(cfgInput, pop = null) {
+// onPolicy (opcional) recibe cada política apenas se evalúa, para mostrar el avance en la interfaz.
+export function optimizePolicy(cfgInput, pop = null, onPolicy = null) {
   const cfg = makeConfig(cfgInput);
   const population = pop ?? buildPopulation(cfg);
-  const ranking = candidatePolicies(cfg).map((policy) => {
+  const candidates = candidatePolicies(cfg);
+  const ranking = candidates.map((policy, k) => {
     let infected = 0;
     let spent = 0;
     for (let r = 0; r < cfg.optimizeRuns; r++) {
@@ -41,7 +43,9 @@ export function optimizePolicy(cfgInput, pop = null) {
       infected += res.infected;
       spent += res.spent;
     }
-    return { policy, infected: (infected / cfg.optimizeRuns) * scaleOf(cfg), spent: spent / cfg.optimizeRuns };
+    const result = { policy, infected: (infected / cfg.optimizeRuns) * scaleOf(cfg), spent: spent / cfg.optimizeRuns };
+    onPolicy?.(result, k, candidates.length);
+    return result;
   }).sort((a, b) => a.infected - b.infected || a.spent - b.spent);
   return { best: ranking[0].policy, ranking };
 }

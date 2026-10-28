@@ -281,6 +281,7 @@ export class Barrio {
   }
 
   showZone(zone) {
+    if (!this.trace) return;
     const home = this.bestByZone.get(zone) ?? this.homes.find((h) => h.zone === zone);
     if (home) this.build(home);
   }

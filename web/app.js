@@ -221,13 +221,37 @@ $('meetBtn').addEventListener('click', () => {
   player.select(neighbours[nextNeighbour++ % neighbours.length]);
 });
 
+// ---------- Mientras optimiza: los 21 planes candidatos van apareciendo con su resultado ----------
+const PRIORITY_ICON = { anillo: 'i-users', mixto: 'i-bio', conectados: 'i-zap' };
+let board = [];
+function resetPolicies() {
+  board = [];
+  $('policies').innerHTML = '';
+}
+function showPolicy({ k, n, result }) {
+  const p = result.policy;
+  const on = (flag, ic, title) => `<svg class="ic${flag ? '' : ' off'}" aria-label="${title}"><use href="#${ic}"/></svg>`;
+  if (!board.length) $('policies').innerHTML = Array.from({ length: n }, (_, j) => `<div class="pol" data-k="${j}"><b>${j + 1}</b></div>`).join('');
+  board[k] = result;
+  const tile = $('policies').querySelector(`[data-k="${k}"]`);
+  tile.innerHTML = `<b>${k + 1}</b><span class="pol-ic">${on(true, PRIORITY_ICON[p.priority], PRIORITY[p.priority])}${on(p.quarantine, 'i-house-q', 'Cuarentena')}${on(p.closures, 'i-lock', 'Cierres')}${on((p.reserve ?? 0) > 0, 'i-coins', 'Reserva')}</span><em>${fmt(result.infected)}</em>`;
+  tile.classList.add('done');
+  // El mejor hasta ahora brilla en verde.
+  const best = board.reduce((b, r, j) => (r && (b < 0 || r.infected < board[b].infected || (r.infected === board[b].infected && r.spent < board[b].spent)) ? j : b), -1);
+  $('policies').querySelectorAll('.pol').forEach((t) => t.classList.toggle('best', Number(t.dataset.k) === best));
+  $('busyText').textContent = `Probando los planes del Comité: ${k + 1} de ${n}. El mejor por ahora deja ${fmt(board[best].infected)} ${terms().bittenM}.`;
+}
+
 // ---------- Simulación ----------
 function setBusy(on, text) {
   busy = on;
   $('runBtn').disabled = on;
   for (const b of document.querySelectorAll('[data-preset]')) b.disabled = on;
   $('busy').hidden = !on;
-  if (on) $('progress').style.width = '0';
+  if (on) {
+    $('progress').style.width = '0';
+    resetPolicies();
+  }
   if (text) $('busyText').textContent = text;
 }
 
@@ -236,8 +260,11 @@ function runLocal(config) {
     const worker = new Worker('./worker.js', { type: 'module' });
     worker.onmessage = ({ data }) => {
       if (data.type === 'progress') {
-        $('progress').style.width = `${data.value}%`;
-        $('busyText').textContent = data.text;
+        if (data.value > 0) $('progress').style.width = `${50 + data.value / 2}%`;
+        $('busyText').textContent = data.value > 0 ? `El mejor plan, contra el azar y contra no hacer nada: ${data.text.replace('Simulando: ', '').replace('…', '')}` : data.text;
+      } else if (data.type === 'policy') {
+        showPolicy(data);
+        $('progress').style.width = `${((data.k + 1) / data.n) * 50}%`;
       } else if (data.type === 'done') {
         worker.terminate();
         resolve(data.summary);
