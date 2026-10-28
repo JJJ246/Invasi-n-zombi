@@ -375,3 +375,4 @@ button.link { display: inline; background: none; border: 0; padding: 0; color: v
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { transition: none !important; animation: none !important; } }
 
 .barrio-name img { display: block; width: 100%; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 6px; margin-bottom: 0.3rem; }
+.barrio-name .credit { display: block; margin: -0.15rem 0 0.25rem; font-size: 0.62rem; color: var(--muted); }

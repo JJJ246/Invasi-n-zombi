@@ -47,8 +47,15 @@ const houseSprite = (hs) => {
   if (hs.roof === 'teja') return 'casa1_teja';
   return pick(hs.roof === 'zinc' ? ['casa1_azul', 'casa1_verde', 'casa1_blanca'] : ['casa1_rosada', 'casa1_naranja'], hash(hs.home, 51));
 };
-// Foto de cada parroquia de Manta (generada con Higgsfield) para la tarjeta del barrio.
-const ZONE_PHOTO = { Tarqui: 'tarqui', Manta: 'manta', 'Los Esteros': 'esteros', 'San Mateo': 'sanmateo', 'Eloy Alfaro': 'eloy' };
+// Foto de cada parroquia de Manta para la tarjeta del barrio: real (Wikimedia Commons, con su autor)
+// cuando hay una con licencia libre del lugar; si no, una ilustración hecha con Higgsfield.
+const ZONE_PHOTO = {
+  Manta: { src: 'real_manta', credit: 'Playa Murciélago. Foto: Cayambe, CC BY-SA 3.0' },
+  'Los Esteros': { src: 'real_esteros', credit: 'Puerto de Manta. Foto: Gordon Leggett, CC BY-SA 4.0' },
+  Tarqui: { src: 'zona_tarqui', credit: 'Ilustración' },
+  'San Mateo': { src: 'zona_sanmateo', credit: 'Ilustración' },
+  'Eloy Alfaro': { src: 'zona_eloy', credit: 'Ilustración' },
+};
 const STATE_COLOR = ['#5fd38d', '#facc15', '#ff3b3b', '#60a5fa', '#2dd4bf'];
 const SHIRTS = ['#e85d5d', '#4f8fe8', '#f2c94c', '#5bbf8a', '#f4f4f4', '#b07be0', '#f08a3c', '#3fb8c4', '#2f3b52', '#e87fb0'];
 const SKIN = ['#8d5a3b', '#a86b47', '#c68a5e', '#e0ad84'];
@@ -335,7 +342,7 @@ export class Barrio {
     this.hasBus = this.people.some((p) => p.bus);
     this.decor = this.makeDecor();
     const photo = ZONE_PHOTO[this.zoneName];
-    this.nameEl.innerHTML = `${photo ? `<img src="img/hf/zona_${photo}.webp" alt="">` : ''}<span>${look.blurb[0].toUpperCase()}${look.blurb.slice(1)}. ${this.houses.length} casas y ${this.people.length} vecinos.</span>`;
+    this.nameEl.innerHTML = `${photo ? `<img src="img/hf/${photo.src}.webp" alt=""><small class="credit">${photo.credit}</small>` : ''}<span>${look.blurb[0].toUpperCase()}${look.blurb.slice(1)}. ${this.houses.length} casas y ${this.people.length} vecinos.</span>`;
     this.countsDay = -1;
     this.captionKey = '';
     this.zoom = 1;
