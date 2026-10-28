@@ -3,14 +3,18 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Seguridad: solo se cargan scripts de este sitio y de cdnjs (Chart.js, con su huella); la API de AWS es la única conexión externa. -->
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; worker-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self'; connect-src 'self' https://*.execute-api.us-east-1.amazonaws.com; object-src 'none'; base-uri 'self'; form-action 'self'">
+  <meta name="referrer" content="strict-origin-when-cross-origin">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
   <title>Comité de Contención · Frena la plaga en Manta</title>
   <meta name="description" content="Simula cómo se propaga una plaga en Manta y encuentra a quién vacunar, qué cerrar y dónde actuar con recursos limitados.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Creepster&family=Special+Elite&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="preload" as="image" href="img/historia/1_bahia.webp" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
   <script src="config.js"></script>
   <script type="module" src="app.js"></script>
 </head>
@@ -99,7 +103,7 @@
         <p class="lead">Elige el brote, pulsa <b>Calcular</b> y mira cuántas vidas salva el mejor plan.</p>
         <ul class="facts">
           <li><svg class="ic"><use href="#i-users"/></svg>10.000 vecinos de Manta</li>
-          <li><svg class="ic"><use href="#i-bio"/></svg>21 planes probados</li>
+          <li><svg class="ic"><use href="#i-bio"/></svg><span id="nPlans">21</span>&nbsp;planes probados</li>
           <li><svg class="ic"><use href="#i-dice"/></svg>Contra no hacer nada y contra el azar</li>
         </ul>
       </div>
@@ -158,9 +162,9 @@
               <label>Días a simular <input type="number" name="days" min="30" max="365"></label>
               <label>Parte de los casos que se reporta (0 a 1) <input type="number" name="detectionProb" min="0.01" max="1" step="any"></label>
               <label>Parte de los hogares que cumple la cuarentena (0 a 1) <input type="number" name="quarantineCompliance" min="0" max="1" step="any"></label>
-              <label>Costo de cada dosis (USD) <input type="number" name="costPerDose" min="0" step="1"></label>
-              <label>Cuarentena, por hogar y día (USD) <input type="number" name="quarantineCostPerHouseholdDay" min="0" step="1"></label>
-              <label>Cerrar una zona, por día (USD) <input type="number" name="closureCostPerDay" min="0" step="500"></label>
+              <label>Costo de cada dosis (USD) <input type="number" name="costPerDose" min="0" max="1000" step="1"></label>
+              <label>Cuarentena, por hogar y día (USD) <input type="number" name="quarantineCostPerHouseholdDay" min="0" max="10000" step="1"></label>
+              <label>Cerrar una zona, por día (USD) <input type="number" name="closureCostPerDay" min="0" max="1000000" step="500"></label>
               <label>Días incubando, mínimo <input type="number" name="latentMin" min="1" max="30"></label>
               <label>Días incubando, máximo <input type="number" name="latentMax" min="1" max="30"></label>
               <label>Días contagiando, mínimo <input type="number" name="infectiousMin" min="1" max="30"></label>
@@ -189,12 +193,12 @@
           <h3><svg class="ic"><use href="#i-zap"/></svg>Brote sorpresa</h3>
           <p class="hint">Cambia las condiciones y el Comité recalcula el plan.</p>
           <div class="presets">
-            <button type="button" data-preset="doble"><img src="img/hf/sp_doble.webp" alt="" width="34" height="34"><b>Doble de contagio</b></button>
-            <button type="button" data-preset="mitad"><img src="img/hf/sp_mitad.webp" alt="" width="34" height="34"><b>Mitad de vacunas</b></button>
-            <button type="button" data-preset="mercado"><img src="img/hf/sp_mercado.webp" alt="" width="34" height="34"><b>Empieza en otro mercado</b></button>
-            <button type="button" data-preset="variante"><img src="img/hf/sp_variante.webp" alt="" width="34" height="34"><b>Vacuna a medias</b></button>
-            <button type="button" data-preset="tarde"><img src="img/hf/sp_tarde.webp" alt="" width="34" height="34"><b>10 días tarde</b></button>
-            <button type="button" data-preset="pobre"><img src="img/hf/sp_pobre.webp" alt="" width="34" height="34"><b>Mitad del dinero</b></button>
+            <button type="button" data-preset="doble"><img src="img/ilustraciones/sp_doble.webp" alt="" width="34" height="34"><b>Doble de contagio</b></button>
+            <button type="button" data-preset="mitad"><img src="img/ilustraciones/sp_mitad.webp" alt="" width="34" height="34"><b>Mitad de vacunas</b></button>
+            <button type="button" data-preset="mercado"><img src="img/ilustraciones/sp_mercado.webp" alt="" width="34" height="34"><b>Empieza en otro mercado</b></button>
+            <button type="button" data-preset="variante"><img src="img/ilustraciones/sp_variante.webp" alt="" width="34" height="34"><b>Vacuna a medias</b></button>
+            <button type="button" data-preset="tarde"><img src="img/ilustraciones/sp_tarde.webp" alt="" width="34" height="34"><b>10 días tarde</b></button>
+            <button type="button" data-preset="pobre"><img src="img/ilustraciones/sp_pobre.webp" alt="" width="34" height="34"><b>Mitad del dinero</b></button>
           </div>
         </section>
         <button type="button" class="ghost" id="backBtn"><svg class="ic"><use href="#i-back"/></svg>Cambiar el brote</button>
@@ -328,7 +332,9 @@
   </main>
 
   <!-- Al calcular: un zombi se lanza contra la cámara y se traga la pantalla (video de Higgsfield). -->
-  <video class="zombie-cut" id="zombieCut" src="img/zombi.mp4" preload="auto" playsinline hidden></video>
+  <video class="zombie-cut" id="zombieCut" src="img/zombi.mp4" preload="none" playsinline hidden></video>
+
+  <p class="toast" id="toast" role="alert" hidden></p>
 
   <div class="busy" id="busy" hidden>
     <img src="logo.svg" alt="" width="96" height="96">

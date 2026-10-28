@@ -1,14 +1,19 @@
+// Archivo principal de la página: une todas las piezas.
+// - Pantalla "Preparar": escenarios, parámetros y validación del formulario.
+// - "Calcular": manda la simulación al worker (o a AWS), muestra la transición y los 21 planes probados.
+// - Pantalla "El plan": KPIs, pasos del plan, Brote Sorpresa y las cuatro vistas (barrio, ciudad, curva, informe).
 import { makeConfig } from './engine/config.js';
+import { candidatePolicies } from './engine/montecarlo.js';
 import { CITIES } from './engine/cities.js';
 import { mayorReport, TERMS } from './engine/report.js';
-import { CityPlayer } from './city.js';
+import { CityPlayer } from './mapa-ciudad.js';
 import { Barrio } from './barrio.js';
-import { ContagionMap } from './contagio.js';
-import { renderVecino, interestingPeople } from './vecino.js';
+import { ContagionMap } from './arbol-contagio.js';
+import { renderVecino, interestingPeople } from './ficha-vecino.js';
 import { CALIBRATION } from './engine/calibration.js';
 import { DENGUE_MANABI_2024 } from './engine/dengue-manabi-2024.js';
 import { SCENARIOS } from './escenarios.js';
-import { startFilm } from './pelicula.js';
+import { startFilm } from './historia.js';
 
 const API_URL = (window.APP_CONFIG && window.APP_CONFIG.apiUrl) || '';
 const form = document.getElementById('controls');
@@ -47,7 +52,8 @@ const terms = () => TERMS[SCENARIOS[scenario].theme];
 const player = new CityPlayer($('cityCard'));
 const barrio = new Barrio($('barrio'), player);
 const tree = new ContagionMap($('treeCard'), player);
-window.__comite = { player, barrio, tree }; // para las pruebas automáticas
+// Solo para las pruebas automáticas (abriendo la página con ?pruebas).
+if (new URLSearchParams(location.search).has('pruebas')) window.__comite = { player, barrio, tree };
 
 // ---------- Pantallas y transición ----------
 const wipeEl = $('wipe');
@@ -162,6 +168,8 @@ function applyScenario(key, keep = {}) {
   document.body.dataset.theme = key;
   document.querySelector('.intro h1').textContent = s.ui.h1;
   document.querySelector('.intro .lead').innerHTML = s.ui.lead;
+  // Con mosquito se prueban también los planes con fumigación (por eso el dengue tiene más).
+  $('nPlans').textContent = candidatePolicies(makeConfig({ ...base, ...s.config, city })).length;
   renderLegend();
 }
 
@@ -189,10 +197,15 @@ function updateOutputs() {
   $('budgetOut').textContent = usd(form.elements.budget.value);
 }
 
-$('scenarios').addEventListener('change', (e) => {
-  const current = readForm();
-  applyScenario(e.target.value, { seed: current.seed, runs: current.runs });
-});
+// Al cambiar de brote se conservan la semilla y las simulaciones (si son válidas); lo demás vuelve al escenario.
+const keepRun = () => {
+  const { seed, runs } = readForm();
+  const keep = {};
+  if (form.elements.seed.value !== '' && seed >= 0 && seed <= 4294967295) keep.seed = Math.floor(seed);
+  if (runs >= 10 && runs <= 5000) keep.runs = runs;
+  return keep;
+};
+$('scenarios').addEventListener('change', (e) => applyScenario(e.target.value, keepRun()));
 
 function renderLegend() {
   const T = terms();
@@ -367,8 +380,46 @@ $('changes').addEventListener('click', (e) => {
   if (e.target.closest('.close')) $('changes').hidden = true;
 });
 
+// Aviso visible en cualquier pantalla (por ejemplo, un dato mal escrito).
+let toastTimer = 0;
+function showToast(text) {
+  const t = $('toast');
+  t.textContent = text;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), 6000);
+}
+
+// Revisa los datos antes de calcular: cada número dentro de su rango y los mínimos por debajo de los máximos.
+const num = (x) => x.toLocaleString('es-EC', { maximumFractionDigits: 2 });
+const labelOf = (el) => (el.closest('label')?.firstChild?.textContent ?? el.name).replace(/\s+/g, ' ').trim();
+function checkForm() {
+  form.querySelectorAll('.invalid').forEach((el) => el.classList.remove('invalid'));
+  const f = form.elements;
+  for (const el of form.querySelectorAll('input[type="number"], input[type="range"]')) {
+    const v = el.value === '' ? NaN : Number(el.value);
+    const min = el.min === '' ? -Infinity : Number(el.min);
+    const max = el.max === '' ? Infinity : Number(el.max);
+    if (!Number.isFinite(v) || v < min || v > max) return [el, `Revisa "${labelOf(el)}": tiene que ser un número entre ${num(min)} y ${num(max)}.`];
+  }
+  if (Number(f.latentMin.value) > Number(f.latentMax.value)) return [f.latentMax, 'Los días incubando: el mínimo no puede ser mayor que el máximo.'];
+  if (Number(f.infectiousMin.value) > Number(f.infectiousMax.value)) return [f.infectiousMax, 'Los días contagiando: el mínimo no puede ser mayor que el máximo.'];
+  return null;
+}
+
 async function simulate(surprise = null) {
   if (busy) return;
+  const problem = checkForm();
+  if (problem) {
+    const [el, text] = problem;
+    if (screen !== 'setup') showScreen('setup', false);
+    el.closest('details')?.setAttribute('open', '');
+    el.classList.add('invalid');
+    el.focus();
+    $('status').textContent = text;
+    showToast(text);
+    return;
+  }
   const config = readForm();
   const useCloud = API_URL && $('useCloud').checked;
   setBusy(true, surprise ? `Brote sorpresa: ${surprise}…` : 'Preparando la ciudad…');
@@ -404,7 +455,12 @@ async function simulate(surprise = null) {
     await loadCity(summary);
     barrio.setActive(screen === 'results' && view === 'barrio');
   } catch (err) {
-    $('status').textContent = `No se pudo simular: ${err.message}`;
+    // El motor nombra los datos por su nombre interno; se cambia por la etiqueta que ve la persona.
+    const key = err.message.split(' ')[0];
+    const el = form.elements[key];
+    const text = `No se pudo calcular: ${el ? err.message.replace(key, `"${labelOf(el)}"`) : err.message}`;
+    $('status').textContent = text;
+    showToast(text);
   } finally {
     setBusy(false);
   }
@@ -439,7 +495,8 @@ function planItems(s) {
   return items.map(([ic, t]) => `<li><svg class="ic"><use href="#${ic}"/></svg><span>${t}</span></li>`).join('');
 }
 
-// El informe para la alcaldía, con títulos y pasos numerados.
+const esc = (t) => String(t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
+// El informe para la alcaldía, con títulos y pasos numerados (el texto se escapa antes de insertarlo).
 function reportHtml(text) {
   const out = [];
   let list = false;
@@ -447,9 +504,9 @@ function reportHtml(text) {
     const numbered = /^\d+\.\s/.test(line);
     if (list && !numbered) { out.push('</ol>'); list = false; }
     if (!line) continue;
-    if (line === line.toUpperCase()) out.push(`<h5>${line[0]}${line.slice(1).toLowerCase()}</h5>`);
-    else if (numbered) { if (!list) { out.push('<ol>'); list = true; } out.push(`<li>${line.replace(/^\d+\.\s*/, '')}</li>`); }
-    else out.push(`<p>${line}</p>`);
+    if (line === line.toUpperCase()) out.push(`<h5>${esc(line[0] + line.slice(1).toLowerCase())}</h5>`);
+    else if (numbered) { if (!list) { out.push('<ol>'); list = true; } out.push(`<li>${esc(line.replace(/^\d+\.\s*/, ''))}</li>`); }
+    else out.push(`<p>${esc(line)}</p>`);
   }
   if (list) out.push('</ol>');
   return out.join('');
@@ -632,7 +689,7 @@ function swarmCut(icon) {
 }
 form.addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!busy) zombieCut();
+  if (!busy && !checkForm()) zombieCut();
   simulate();
 });
 form.addEventListener('keydown', (e) => {
@@ -641,10 +698,7 @@ form.addEventListener('keydown', (e) => {
     simulate();
   }
 });
-$('resetBtn').addEventListener('click', () => {
-  const current = readForm();
-  applyScenario(scenario, { seed: current.seed, runs: current.runs });
-});
+$('resetBtn').addEventListener('click', () => applyScenario(scenario, keepRun()));
 $('copyBtn').addEventListener('click', () => navigator.clipboard?.writeText($('report').innerText));
 for (const button of document.querySelectorAll('[data-preset]')) {
   button.addEventListener('click', () => {
@@ -659,4 +713,5 @@ applyScenario('zombi', { runs: 100 });
 const whenLoaded = (fn) => (document.readyState === 'complete' ? fn() : window.addEventListener('load', fn));
 whenLoaded(() => {
   drawCalibration();
+  $('zombieCut').preload = 'auto'; // el video del zombi se baja cuando la página ya cargó
 });

@@ -107,8 +107,9 @@ body::before { content: ""; position: fixed; inset: 0; z-index: -1; pointer-even
 
 /* Pantallas */
 .app { padding: 0 clamp(16px, 2.4vw, 32px); max-width: 1760px; margin: 0 auto; }
-.screen { animation: rise 0.7s cubic-bezier(.2, .9, .3, 1.2) both; }
-@keyframes rise { from { opacity: 0; transform: translateY(26px) rotate(-0.4deg); } }
+.screen { animation: rise 0.8s cubic-bezier(.22, 1, .36, 1) both; }
+@keyframes rise { from { opacity: 0; transform: translateY(18px); } }
+@keyframes fade { from { opacity: 0; } }
 
 /* Pantalla 1: preparar */
 .setup-screen { min-height: calc(100vh - var(--top)); display: grid; align-content: center; gap: 1.4rem; padding: 1.4rem 0 2rem; }
@@ -222,7 +223,7 @@ button.ghost { background: transparent; color: var(--muted); }
 .day { font: 0.95rem var(--type); font-variant-numeric: tabular-nums; min-width: 4.4em; color: var(--accent-2); }
 .stage-body { position: relative; flex: 1; min-height: 0; overflow: clip; }
 .pane-barrio, .pane-curva, .pane-informe { grid-template-rows: minmax(0, 1fr); }
-.pane { position: absolute; inset: 0; animation: rise 0.45s ease-out both; }
+.pane { position: absolute; inset: 0; animation: fade 0.4s ease-out both; }
 
 /* El barrio y el árbol, lado a lado */
 .pane-barrio { display: grid; grid-template-columns: minmax(0, 1.8fr) minmax(300px, 1fr); gap: 10px; }
@@ -339,7 +340,7 @@ button.ghost { background: transparent; color: var(--muted); }
 .changes ul { margin: 0.6rem 0 0; padding-left: 1.1rem; font-size: 0.82rem; }
 
 /* Calculando: la mano sale de la tierra */
-.busy { position: fixed; z-index: 50; inset: 0; display: grid; place-content: center; justify-items: center; gap: 0.8rem; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(4px); }
+.busy { animation: fade 0.35s ease-out both; position: fixed; z-index: 50; inset: 0; display: grid; place-content: center; justify-items: center; gap: 0.8rem; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(4px); }
 .busy img { animation: emerge 1.4s ease-in-out infinite alternate; filter: drop-shadow(0 0 20px color-mix(in srgb, var(--good) 33%, transparent)); }
 @keyframes emerge { from { transform: translateY(10px) rotate(-6deg); } to { transform: translateY(-8px) rotate(6deg); } }
 .busy p { margin: 0; font: 1rem var(--type); color: var(--text); }
@@ -347,7 +348,7 @@ button.ghost { background: transparent; color: var(--muted); }
 .meter b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--good), color-mix(in srgb, var(--good) 60%, white)); box-shadow: 0 0 12px var(--good); transition: width 0.3s; }
 
 /* Ficha del vecino (encima del árbol) */
-.vecino { position: absolute; z-index: 3; inset: 0; overflow: auto; background: var(--panel-2); border-radius: 12px; padding: 1rem 1.1rem; font-size: 0.84rem; animation: rise 0.35s ease-out both; }
+.vecino { position: absolute; z-index: 3; inset: 0; overflow: auto; background: var(--panel-2); border-radius: 12px; padding: 1rem 1.1rem; font-size: 0.84rem; animation: rise 0.45s cubic-bezier(.22, 1, .36, 1) both; }
 .vecino .close { position: absolute; top: 0.5rem; right: 0.5rem; padding: 0.15rem 0.55rem; }
 .vecino h3 { margin: 0; font-size: 1.05rem; font-family: Inter, sans-serif; }
 .vecino h4 { margin: 0.8rem 0 0.3rem; font-size: 0.84rem; color: var(--text); }
@@ -378,8 +379,8 @@ button.link { display: inline; background: none; border: 0; padding: 0; color: v
 .wipe { position: fixed; inset: 0; z-index: 100; pointer-events: none; transform: translateY(-130%); }
 .wipe::before { content: ""; position: absolute; inset: 0 0 139px; background: linear-gradient(180deg, #2b0a06, #7a1d0c 60%, #b8320f); }
 .wipe svg { position: absolute; left: 0; bottom: 0; width: 100%; height: 140px; fill: #b8320f; }
-.wipe.down { animation: wipe-down 0.5s cubic-bezier(.6, 0, .4, 1) forwards; }
-.wipe.up { animation: wipe-out 0.75s cubic-bezier(.6, 0, .4, 1) forwards; }
+.wipe.down { animation: wipe-down 0.65s cubic-bezier(.65, 0, .35, 1) forwards; }
+.wipe.up { animation: wipe-out 0.95s cubic-bezier(.65, 0, .35, 1) forwards; }
 @keyframes wipe-down { from { transform: translateY(-130%); } to { transform: translateY(0); } }
 @keyframes wipe-out { from { transform: translateY(0); } to { transform: translateY(130%); } }
 
@@ -438,3 +439,7 @@ button.link { display: inline; background: none; border: 0; padding: 0; color: v
 @keyframes swarm-bg { 0% { background: transparent; } 55% { background: color-mix(in srgb, var(--bg) 92%, transparent); } 100% { background: transparent; } }
 
 .anchor { display: block; scroll-margin-top: var(--top); }
+
+/* Avisos y datos mal escritos */
+.toast { position: fixed; z-index: 95; top: calc(var(--top) + 12px); left: 50%; transform: translateX(-50%); max-width: min(560px, 92vw); margin: 0; padding: 0.75rem 1rem; border: 1px solid var(--bad); border-radius: 10px; background: color-mix(in srgb, var(--bad) 18%, var(--bg)); color: var(--text); font-size: 0.9rem; box-shadow: 0 16px 40px #000a; animation: drop 0.4s cubic-bezier(.22, 1, .36, 1) both; }
+.invalid { border-color: var(--bad) !important; box-shadow: 0 0 0 2px color-mix(in srgb, var(--bad) 40%, transparent); }

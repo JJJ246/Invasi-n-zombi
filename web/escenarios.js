@@ -8,7 +8,7 @@ const INFLUENZA = { r0: 1.8, latentMin: 1, latentMax: 3, infectiousMin: 4, infec
 const DENGUE = { r0: CALIBRATION.r0, ...DENGUE_PERIODS, days: 180, vectorBorne: true, initialInfected: 10 };
 
 // Imagen de cada escenario (generada con Higgsfield para este proyecto).
-const ART = Object.fromEntries(['zombi', 'gripe', 'dengue'].map((k) => [k, `<img class="sc-art" src="img/hf/esc_${k}.webp" alt="" width="88" height="66">`]));
+const ART = Object.fromEntries(['zombi', 'gripe', 'dengue'].map((k) => [k, `<img class="sc-art" src="img/ilustraciones/esc_${k}.webp" alt="" width="88" height="66">`]));
 
 export const SCENARIOS = {
   zombi: {

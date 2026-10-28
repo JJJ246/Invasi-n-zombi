@@ -1,4 +1,5 @@
-// Corre el motor en segundo plano para que la página no se congele.
+// Corre el motor en segundo plano (Web Worker) para que la página no se congele mientras calcula.
+// Mensajes que manda: 'progress' (avance), 'policy' (cada plan probado), 'done' (resumen) y 'trace' (la corrida para animar).
 import { makeConfig, optimizePolicy, runBatch, aggregate, buildPopulation, traceRun, candidatePolicies } from './engine/index.js';
 
 const CHUNK = 10;
@@ -26,22 +27,9 @@ function trace({ config, policy, run }) {
   self.postMessage({ type: 'trace', trace: t }, buffers);
 }
 
-// Portada: el primer brote (con la semilla por defecto) que despega, con la política del escenario base.
-function hero({ config, policy }) {
-  for (let run = 0; run < 30; run++) {
-    const t = traceRun(config, policy, run);
-    if (t.nada.infected / t.N < 0.2 && run < 29) continue;
-    const buffers = [t.layout.x.buffer, t.layout.y.buffer, t.nada.frames.buffer, t.adaptativa.frames.buffer];
-    delete t.azar;
-    self.postMessage({ type: 'hero', trace: t }, buffers);
-    return;
-  }
-}
-
 self.onmessage = ({ data }) => {
   try {
-    if (data.type === 'hero') hero(data);
-    else if (data.type === 'trace') trace(data);
+    if (data.type === 'trace') trace(data);
     else simulate(data.config);
   } catch (err) {
     self.postMessage({ type: 'error', message: err.message });

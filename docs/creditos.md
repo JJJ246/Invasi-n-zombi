@@ -7,12 +7,12 @@
 Ambas se redujeron de tamaño y se convirtieron a WebP.
 
 ## Generadas con IA (Higgsfield, GPT Image 2.5)
-- `web/img/sims/`: las piezas del barrio (casas, puesto del mercado, colegio, iglesia, atunera, astillero, laboratorio, fábrica y oficinas), en perspectiva isométrica y fondo transparente. Las indicaciones describen cómo son de verdad las casas de Manta: bloque pintado, techo de zinc o losa con tanque azul, rejas, casas de caña sobre pilotes.
-- `web/img/hf/`: las ilustraciones de los escenarios, del Brote Sorpresa y de las parroquias que no tienen una foto libre (Tarqui, San Mateo y Eloy Alfaro).
+- `web/img/barrio/`: las piezas del barrio (casas, puesto del mercado, colegio, iglesia, atunera, astillero, laboratorio, fábrica y oficinas), en perspectiva isométrica y fondo transparente. Las indicaciones describen cómo son de verdad las casas de Manta: bloque pintado, techo de zinc o losa con tanque azul, rejas, casas de caña sobre pilotes.
+- `web/img/ilustraciones/`: las ilustraciones de los escenarios, del Brote Sorpresa y de las parroquias que no tienen una foto libre (Tarqui, San Mateo y Eloy Alfaro).
 - `web/film/`: la película de la portada.
 
 ## La historia y las transiciones (Higgsfield)
-- `web/img/historia/`: las 8 escenas de la historia (GPT Image 2.5, 2K). El movimiento (cámara lenta, fundidos, lluvia, niebla, relámpagos, grano y la entrada a la pantalla del Comité) es un render propio en `web/pelicula.js`.
+- `web/img/historia/`: las 8 escenas de la historia (GPT Image 2.5, 2K). El movimiento (cámara lenta, fundidos, lluvia, niebla, relámpagos, grano y la entrada a la pantalla del Comité) es un render propio en `web/historia.js`.
 - `web/img/zombi.mp4`: el zombi que se lanza contra la cámara al calcular (Seedance 2.5, 1080p, recortado a 2 segundos).
-- `web/img/tex/`: texturas del suelo del barrio (asfalto, arena, mar, tierra, vereda y suelo seco).
-- `web/img/sims/`: además de los edificios, los contenedores, la panga, la palmera y los restos del apocalipsis (auto quemado, barricada, basura y barril con fuego), que aparecen según cuántos zombis hay.
+- `web/img/suelo/`: texturas del suelo del barrio (asfalto, arena, mar, tierra, vereda y suelo seco).
+- `web/img/barrio/`: además de los edificios, los contenedores, la panga, la palmera y los restos del apocalipsis (auto quemado, barricada, basura y barril con fuego), que aparecen según cuántos zombis hay.

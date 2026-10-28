@@ -3,11 +3,11 @@
 // mañana a su colegio, su trabajo (a pie o en bus) o al mercado, y vuelve en la tarde. El rombo sobre
 // la cabeza es su estado ese día. Lo que hace el Comité también se ve: vacunas, hogares en cuarentena,
 // mercado o colegio cerrados, brigadas de fumigación.
-// Cada zona tiene su propio aspecto (barrios.js). Las casas y las personas son las de la simulación
+// Cada zona tiene su propio aspecto (zonas.js). Las casas y las personas son las de la simulación
 // (los hogares más cercanos entre sí en el mapa real); calles y edificios son un dibujo esquemático.
-import { persona } from './vecino.js';
+import { persona } from './ficha-vecino.js';
 import { CITIES } from './engine/cities.js';
-import { lookOf } from './barrios.js';
+import { lookOf } from './zonas.js';
 
 const G = 30; // casillas por lado
 // Calles y manzanas: cambian con cada zona (setStreets), así cada barrio tiene su propio trazado.
@@ -28,22 +28,28 @@ const LAYOUTS = {
 // Higgsfield en perspectiva isométrica y fondo transparente. sprites.json guarda el punto más bajo de
 // cada pieza (su esquina de adelante), que se apoya en la esquina de adelante de su casilla.
 const SPRITE = {};
-fetch('img/sims/sprites.json')
-  .then((r) => r.json())
-  .then((meta) => {
-    for (const [name, m] of Object.entries(meta)) {
-      const img = new Image();
-      img.src = `img/sims/${name}.webp`;
-      SPRITE[name] = { ...m, img };
-    }
-  })
-  .catch(() => {}); // sin piezas, el barrio se dibuja con cajas como antes
 // Texturas del suelo (Higgsfield): se pintan en perspectiva con la misma proyección que las casillas.
 const TEX = {};
-for (const name of ['asfalto', 'arena', 'mar', 'tierra', 'vereda', 'suelo']) {
-  const img = new Image();
-  img.src = `img/tex/${name}.webp`;
-  TEX[name] = img;
+// Las imágenes del barrio se piden recién cuando se abre el barrio, para no frenar la carga de la página.
+let artRequested = false;
+function loadArt() {
+  if (artRequested) return;
+  artRequested = true;
+  fetch('img/barrio/sprites.json')
+    .then((r) => r.json())
+    .then((meta) => {
+      for (const [name, m] of Object.entries(meta)) {
+        const img = new Image();
+        img.src = `img/barrio/${name}.webp`;
+        SPRITE[name] = { ...m, img };
+      }
+    })
+    .catch(() => {}); // sin piezas, el barrio se dibuja con cajas
+  for (const name of ['asfalto', 'arena', 'mar', 'tierra', 'vereda', 'suelo']) {
+    const img = new Image();
+    img.src = `img/suelo/${name}.webp`;
+    TEX[name] = img;
+  }
 }
 const GROUND_TEX = { seco: 'suelo', tierra: 'tierra', arena: 'arena', urbano: 'vereda', verde: 'suelo' };
 // Color del ambiente cuando el brote crece (tinte que oscurece y niebla), según la enfermedad.
@@ -241,6 +247,7 @@ export class Barrio {
   }
 
   load(trace, cfg, theme, terms) {
+    loadArt();
     this.trace = trace;
     this.terms = terms;
     this.zombie = theme === 'zombi';
@@ -361,7 +368,7 @@ export class Barrio {
     this.hasBus = this.people.some((p) => p.bus);
     this.decor = this.makeDecor();
     const photo = ZONE_PHOTO[this.zoneName];
-    this.nameEl.innerHTML = `${photo ? `<img src="img/hf/${photo.src}.webp" alt=""><small class="credit">${photo.credit}</small>` : ''}<span>${look.blurb[0].toUpperCase()}${look.blurb.slice(1)}. ${this.houses.length} casas y ${this.people.length} vecinos.</span>`;
+    this.nameEl.innerHTML = `${photo ? `<img src="img/ilustraciones/${photo.src}.webp" alt=""><small class="credit">${photo.credit}</small>` : ''}<span>${look.blurb[0].toUpperCase()}${look.blurb.slice(1)}. ${this.houses.length} casas y ${this.people.length} vecinos.</span>`;
     this.countsDay = -1;
     this.captionKey = '';
     this.zoom = 1;

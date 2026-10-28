@@ -44,10 +44,10 @@ Tabla completa con rangos, política elegida y huella de cada escenario: [docs/r
 
 ## Cómo usarla
 
-Todo cabe en una sola ventana (en el celular, en una página que baja).
+La página empieza con una historia corta que avanza con el scroll y termina sola en el simulador. Después, todo cabe en una sola ventana (en el celular, en una página que baja).
 
 1. **Preparar:** elige el brote (plaga zombi, gripe fuerte o dengue), dónde empieza, qué tan contagioso es, cuántas vacunas llegan por día, cuánto protegen y el presupuesto. El resto está en "Ajustes avanzados".
-2. Pulsa **Calcular el mejor plan** (100 simulaciones en el navegador, o en paralelo en AWS Lambda).
+2. Pulsa **Calcular el mejor plan** (100 simulaciones en el navegador, o en paralelo en AWS Lambda). Mientras calcula se ven los planes candidatos (21, o 33 con dengue porque se suma la fumigación) con su resultado; el mejor se marca en verde. Cada brote tiene su propia paleta y textos.
 3. **El plan:** a la izquierda, cuántas personas se salvan, los pasos del plan con íconos y la prueba estadística contra las dos líneas base. A la derecha, cuatro vistas: **el barrio** (con el árbol del contagio al lado), **la ciudad** (los tres mapas), **la curva** (con la calibración) y el **informe para la alcaldía**.
 4. **Brote sorpresa:** el doble de contagio, la mitad de las vacunas, empieza en otro mercado, una vacuna que protege a medias, 10 días tarde o la mitad del dinero. El plan **se recalcula solo** y muestra qué cambió.
 5. Toca a un vecino del barrio o un punto del mapa para **conocer su historia**, o pulsa "Un vecino".
@@ -97,7 +97,7 @@ P(mordida hoy) = 1 − e^(−q × presión)
 4. **Fumigación (solo si la plaga la transmite un mosquito, como el dengue):** envía brigadas a la parroquia donde los casos reportados superan un umbral; mientras dura, el contagio en esa parroquia baja a la mitad (**SUPUESTO**), también dentro de las casas.
 5. **Reserva de presupuesto:** puede guardar parte del dinero (0 % o 50 %) para cuarentenas y cierres en vez de gastarlo todo en vacunas los primeros días. Lo descubrimos probando: gastar todo en vacunas al inicio deja sin dinero para aislar los casos que aparecen después, y el brote se escapa.
 
-**Optimizador:** antes de recomendar, prueba **21 políticas candidatas** (3 formas de priorizar vacunas × con o sin cierres × con o sin cuarentenas × reserva del 0 % o 50 %) en corridas de **entrenamiento con semillas distintas** a las de evaluación, y elige la que deja menos mordidos; si empatan, la más barata. Después la evalúa en corridas nuevas. Cuando el jurado cambia las condiciones (Brote Sorpresa), **la estrategia se vuelve a optimizar sola** y puede cambiar de política: por ejemplo, si todo empeora a la vez, prioriza a los más conectados de la ciudad en vez del entorno de los casos.
+**Optimizador:** antes de recomendar, prueba **21 políticas candidatas** (33 cuando la plaga la transmite un mosquito, porque se suma la fumigación; 3 formas de priorizar vacunas × con o sin cierres × con o sin cuarentenas × reserva del 0 % o 50 %) en corridas de **entrenamiento con semillas distintas** a las de evaluación, y elige la que deja menos mordidos; si empatan, la más barata. Después la evalúa en corridas nuevas. Cuando el jurado cambia las condiciones (Brote Sorpresa), **la estrategia se vuelve a optimizar sola** y puede cambiar de política: por ejemplo, si todo empeora a la vez, prioriza a los más conectados de la ciudad en vez del entorno de los casos.
 
 | Prioridad de vacunas | Qué hace |
 |---|---|
@@ -211,17 +211,45 @@ El script corre los tests, despliega `infra/template.yaml` con SAM (incluido el 
 
 Para probar en local sin AWS: `npm run dev` y abre http://localhost:8765.
 
-## Estructura
+## Mapa del código
+
+Cada carpeta tiene su propio README con una línea por archivo.
 
 ```
-src/engine/   motor (config, población, modelo SEIR, Monte Carlo + optimizador, informe)
-src/lambda/   handlers de AWS Lambda (simulate, batch)
-web/          interfaz (HTML + JS sin framework, Chart.js por CDN)
-infra/        AWS SAM (template.yaml)
-tests/        tests con node:test
-scripts/      despliegue, simulación por terminal, tabla de escenarios
-docs/         arquitectura, costos, resultados, captura del Budget
+README.md            este archivo
+web/                 la página (HTML, CSS y JavaScript sin frameworks)   → web/README.md
+  index.html           historia + "Preparar" + "El plan"
+  app.js               archivo principal: une todo
+  historia.js          la película del principio (scroll)
+  escenarios.js        los tres brotes y sus textos
+  barrio.js / zonas.js el barrio estilo Sims y cómo es cada parroquia
+  mapa-ciudad.js       los tres mapas de la ciudad día a día
+  arbol-contagio.js    ¿cómo se propagó? desde el paciente cero
+  ficha-vecino.js      la ficha de cada persona
+  worker.js            corre el motor sin congelar la página
+  img/                 imágenes y video                                  → web/img/README.md
+src/
+  engine/              el motor de la simulación (navegador, Lambda y tests)  → src/README.md
+  lambda/              las funciones de AWS Lambda
+infra/template.yaml  infraestructura en AWS (SAM)                        → infra/README.md
+scripts/             armar, desplegar, simular y calibrar desde la terminal → scripts/README.md
+tests/               pruebas automáticas (npm test)                      → tests/README.md
+docs/                arquitectura, costos, resultados, calibración, créditos → docs/README.md
 ```
+
+## Seguridad
+
+- Sin llaves ni contraseñas en el código ni en el repositorio.
+- IAM de mínimo privilegio, buckets privados y cifrados, solo HTTPS y límite de peticiones en la API.
+- CloudFront agrega las cabeceras de seguridad administradas por AWS (HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy).
+- La página declara una política de contenido (CSP): solo carga scripts propios y Chart.js desde cdnjs, este último con su huella de integridad (SRI).
+- Todo texto que viene de la simulación se escapa antes de mostrarse.
+- La API y la página validan cada dato (rangos, mínimos y máximos) y responden con un mensaje claro.
+
+## Cómo lo verificamos
+
+- `npm test`: 23 pruebas del motor y de la API.
+- Revisión en un navegador sin pantalla (Brave en modo headless) antes de cada entrega: la página cabe en una ventana, el barrio va a 60 cuadros por segundo, cero errores en la consola, clics en cada persona, casa, colegio, bus y mapa, datos fuera de rango, doble clic en "Calcular" y Brote Sorpresa mientras calcula.
 
 ## Limitaciones conocidas
 
