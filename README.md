@@ -183,6 +183,15 @@ La interfaz muestra la **huella de la configuración** (hash): si la huella y la
 
 ---
 
+## Decisiones de diseño
+
+- **Modelo SEIR basado en agentes sobre una red de contactos de Manta** (hogar, colegio, trabajo, bus, mercado, barrio): permite decidir *a quién* y *dónde* intervenir, no solo cuánto. Ver [El modelo](#el-modelo).
+- **Estrategia elegida por simulación, no a mano:** el Comité prueba 21 planes (33 con dengue) con otras semillas y se queda con el que deja menos afectados al menor costo; solo usa casos reportados y nunca vacuna a infectados o inmunes. Ver [La estrategia del Comité](#la-estrategia-del-comité).
+- **Comparación justa:** las dos líneas base (no hacer nada y azar con exactamente los mismos recursos) corren con las mismas semillas, y se reportan promedio y rango del 5 % al 95 %.
+- **Reproducible:** misma configuración + misma semilla = mismo resultado, en el navegador y en AWS; cada configuración tiene su huella.
+- **Mismo motor en el navegador y en Lambda:** la demo funciona sin internet y AWS reparte miles de corridas en paralelo, todo serverless (S3 + CloudFront + API Gateway + Lambda) para que el costo sea casi cero. Ver [Arquitectura en AWS](#arquitectura-en-aws).
+- **Sin frameworks ni dependencias en el motor:** JavaScript puro, fácil de leer y de explicar.
+
 ## Arquitectura en AWS
 
 | Pieza | Servicio | ¿Pública? |
