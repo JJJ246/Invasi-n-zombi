@@ -3,6 +3,8 @@
 | Carpeta o archivo | Qué es |
 |---|---|
 | `historia/` | Las 8 escenas de la película del principio (generadas con Higgsfield). |
+| `halloween/` | Adornos de "Preparar": patrón de fondo, calabaza, murciélagos, telaraña y velas (Higgsfield). |
+| `prueba/` | Barrios pintados, máscaras de calles (`paso_*.png`), vecinos, ciclos de caminata y el video del mosquito. |
 | `carga/` | La escena de carga de cada brote: el zombi, el bus de la gripe, el mosquito del dengue y la calle de barrio con tanques de agua (Higgsfield). |
 | `barrio/` | Las piezas del barrio: casas, colegio, iglesia, trabajos, contenedores, pangas, palmeras y restos. `sprites.json` dice dónde apoya cada pieza en el suelo. |
 | `suelo/` | Texturas del suelo del barrio: asfalto, arena, mar, tierra, vereda y suelo seco. |

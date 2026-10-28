@@ -7,7 +7,9 @@ Todo lo que ve la persona. No usa frameworks: HTML, CSS y JavaScript con módulo
 | `index.html` | La página: la historia, la pantalla "Preparar" y la pantalla "El plan". |
 | `styles.css` | Todos los estilos. Arriba están los colores de cada brote (zombi, gripe, dengue). |
 | `app.js` | Archivo principal: une todo, lee el formulario, lanza el cálculo y muestra el resultado. |
-| `historia.js` | La película del principio: 8 escenas que avanzan con el scroll como capítulos (corte de entrada, texto animado con GSAP, corte de salida) y terminan en el simulador. |
+| `historia.js` | La película del principio: 7 tomas (420 cuadros) que el scroll recorre como un video, con un indicador de capítulo y un texto por toma animado con GSAP. Primero baja una versión liviana y luego la nítida. |
+| `pelicula/` | Los cuadros de la película: `lq/` (640 px, carga rápida) y `hq/` (1920 px, nítidos). |
+| `prueba/` | Prototipo del barrio pintado: 5 barrios de Manta, calles sacadas de una máscara (A*) y vecinos con caminata animada. Se abre en `/prueba/`. |
 | `escenarios.js` | Los tres brotes (zombi, gripe fuerte, dengue): enfermedad, textos e imagen de cada uno. |
 | `barrio.js` | "El barrio": la vista estilo Sims con casas, personas, bus, día y noche. |
 | `zonas.js` | Cómo es cada parroquia de Manta en el barrio (mar, puerto, tipo de casas, calles). |

@@ -1,13 +1,16 @@
 // La historia al principio del simulador: una película que el scroll recorre cuadro a cuadro, como un video.
-// Son 7 tomas continuas generadas con Higgsfield (bahía, mercado, ciudad, Comité, calle, neblina, amanecer),
-// 420 cuadros en total. Encima, un texto por toma que entra letra por letra con GSAP.
-// Fluidez: cada cuadro se decodifica antes de necesitarlo (ImageBitmap) y entre dos cuadros hay un fundido,
-// así el movimiento es continuo aunque el scroll avance de a poco.
+// Son 7 tomas continuas generadas con Higgsfield y mejoradas a 2K (bahía, mercado, ciudad, Comité, calle,
+// neblina, amanecer), 420 cuadros. Encima, un texto por toma que entra letra por letra con GSAP.
+// Fluidez, incluso con internet lento:
+// - primero baja una versión liviana de toda la película (pelicula/lq, 640 px), así se puede recorrer enseguida;
+// - los cuadros nítidos (pelicula/hq, 1920 px) se piden y decodifican solo cerca de donde se está mirando;
+// - entre dos cuadros hay un fundido y solo se redibuja si algo cambió; el grano y la viñeta son capas CSS.
 // Al final la imagen se funde con el fondo y la página sigue sola hacia el simulador.
 
 const FRAMES = 420;
 const SHOTS = 7; // tomas de 60 cuadros
-const AHEAD = 24; // cuadros decodificados por delante y por detrás de lo que se ve
+const AHEAD = 10; // cuadros nítidos decodificados por delante y por detrás de lo que se ve
+const CHAPTERS = ['La bahía', 'El mercado', 'La ciudad', 'El Comité', 'El plan', 'La neblina se va', 'Amanece'];
 const $ = (id) => document.getElementById(id);
 const esc = (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' })[c] ?? c;
 
@@ -30,28 +33,42 @@ const ENTRANCES = {
   escribe: { from: { opacity: 0, x: -6 }, stagger: 0.02, ease: 'steps(1)' },
 };
 
-// La línea de tiempo de los textos dura lo mismo que la película (7 tomas) y avanza con el scroll.
-function buildCaptions(caps) {
-  const tl = gsap.timeline({ paused: true, defaults: { duration: 0.12 } });
-  caps.forEach((cap, k) => {
-    const [start, end] = WINDOWS[k] ?? [k + 0.15, k + 0.75];
-    const hl = cap.querySelector('.hl');
+// Los textos: el scroll decide CUÁNDO aparece cada uno (su ventana en la película), pero la animación corre
+// sola, en menos de un segundo. Así el texto siempre termina completo y se puede leer aunque el scroll se detenga.
+function makeCaptions(caps) {
+  const parts = caps.map((cap) => {
     const time = cap.querySelector('.time');
     const sub = cap.querySelector('.sub');
-    const chars = splitChars(hl);
-    const timeChars = splitChars(time);
-    const kind = ENTRANCES[cap.dataset.anim] ?? ENTRANCES.sube;
-    tl.set(cap, { autoAlpha: 1 }, start);
-    tl.fromTo(timeChars, { opacity: 0 }, { opacity: 1, duration: 0.08, stagger: 0.006, ease: 'steps(1)' }, start);
-    tl.from(chars, { ...kind.from, duration: 0.16, stagger: kind.stagger, ease: kind.ease }, start + 0.05);
-    if (sub) tl.from(sub, { opacity: 0, y: 24, filter: 'blur(6px)', duration: 0.1 }, start + 0.2);
-    if (end === null) return; // el último se queda hasta el final
-    tl.to(chars, { opacity: 0, yPercent: -60, filter: 'blur(8px)', stagger: { each: 0.004, from: 'random' }, duration: 0.08 }, end);
-    tl.to([time, sub].filter(Boolean), { opacity: 0, y: -12, duration: 0.08 }, end);
-    tl.set(cap, { autoAlpha: 0 }, end + 0.14);
+    return { cap, time, sub, chars: splitChars(cap.querySelector('.hl')), timeChars: splitChars(time), kind: ENTRANCES[cap.dataset.anim] ?? ENTRANCES.sube, on: false, tl: null };
   });
-  tl.to({}, { duration: 0 }, SHOTS);
-  return tl;
+  gsap.set(caps, { autoAlpha: 0 });
+  const show = (x) => {
+    x.tl?.kill();
+    x.tl = gsap.timeline()
+      .set(x.cap, { autoAlpha: 1 })
+      .fromTo(x.timeChars, { opacity: 0 }, { opacity: 1, duration: 0.25, stagger: 0.025, ease: 'steps(1)' }, 0)
+      .fromTo(x.chars, { ...x.kind.from }, { yPercent: 0, opacity: 1, rotateX: 0, rotate: 0, scale: 1, x: 0, filter: 'blur(0px)', duration: 0.7, stagger: x.kind.stagger * 2.5, ease: x.kind.ease }, 0.1)
+      .fromTo(x.sub ?? [], { opacity: 0, y: 24, filter: 'blur(6px)' }, { opacity: 1, y: 0, filter: 'blur(0px)', duration: 0.5 }, 0.45);
+  };
+  const hide = (x) => {
+    x.tl?.kill();
+    x.tl = gsap.timeline()
+      .to(x.chars, { opacity: 0, yPercent: -60, filter: 'blur(8px)', stagger: { each: 0.01, from: 'random' }, duration: 0.35 }, 0)
+      .to([x.time, x.sub].filter(Boolean), { opacity: 0, y: -12, duration: 0.3 }, 0)
+      .set(x.cap, { autoAlpha: 0 })
+      .set([x.time, x.sub].filter(Boolean), { opacity: 1, y: 0 });
+  };
+  return {
+    update(shot) {
+      parts.forEach((x, k) => {
+        const [start, end] = WINDOWS[k] ?? [k + 0.15, k + 0.75];
+        const want = shot >= start && (end === null || shot < end);
+        if (want === x.on) return;
+        x.on = want;
+        want ? show(x) : hide(x);
+      });
+    },
+  };
 }
 
 export function startFilm({ onEnd } = {}) {
@@ -64,76 +81,68 @@ export function startFilm({ onEnd } = {}) {
   const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
   // ---------- Cuadros ----------
-  const frames = new Array(FRAMES); // imágenes descargadas (comprimidas)
-  const bitmaps = new Map(); // cuadro → ImageBitmap listo para dibujar
+  const lq = new Array(FRAMES); // versión liviana, ya decodificada (<img>)
+  const hq = new Array(FRAMES); // versión nítida descargada
+  const bitmaps = new Map(); // cuadro nítido → ImageBitmap listo para dibujar
   const decoding = new Set();
+  const asking = new Set();
   let shown = 0; // cuadro que se ve (se acerca suave al que pide el scroll)
   let target = 0;
-  // Orden de carga: primero 1 de cada 8 cuadros (la película ya se puede recorrer), luego 1 de cada 4, luego el resto.
+  let dirty = true;
+  const url = (tier, i) => `pelicula/${tier}/${String(i).padStart(3, '0')}.webp`;
+  // Liviana: primero 1 de cada 8 cuadros (ya se puede recorrer), luego 1 de cada 4, luego el resto.
   const order = [];
   const queued = new Uint8Array(FRAMES);
   for (const step of [8, 4, 2, 1]) for (let i = 0; i < FRAMES; i += step) if (!queued[i]) (queued[i] = 1), order.push(i);
   let next = 0;
-  const loadMore = () => {
+  const loadLight = () => {
     if (next >= order.length) return;
     const i = order[next++];
     const img = new Image();
-    img.decoding = 'async';
-    img.onload = () => {
-      frames[i] = img;
-      if (Math.abs(i - shown) <= AHEAD) decodeAround();
-      loadMore();
-    };
-    img.onerror = loadMore;
-    img.src = `pelicula/${String(i).padStart(3, '0')}.webp`;
+    img.src = url('lq', i);
+    img.decode().then(() => { lq[i] = img; dirty = true; }, () => {}).finally(loadLight);
   };
-  for (let k = 0; k < 6; k++) loadMore(); // 6 descargas en paralelo
-
-  // Mantiene decodificados los cuadros cercanos y libera la memoria de los lejanos.
+  for (let k = 0; k < 4; k++) loadLight();
+  // Nítida: se pide solo alrededor de lo que se ve, y se suelta lo que quedó lejos.
+  const askSharp = (i) => {
+    if (i < 0 || i >= FRAMES || hq[i] || asking.has(i) || asking.size >= 6) return;
+    asking.add(i);
+    const img = new Image();
+    img.src = url('hq', i);
+    img.decode().then(() => { hq[i] = img; decodeAround(); }, () => {}).finally(() => asking.delete(i));
+  };
   function decodeAround() {
     const c = Math.round(shown);
     for (const [k, bmp] of bitmaps) {
-      if (Math.abs(k - c) > AHEAD * 1.5) {
-        bmp.close?.();
-        bitmaps.delete(k);
-      }
+      if (Math.abs(k - c) > AHEAD * 1.5) { bmp.close?.(); bitmaps.delete(k); }
     }
     for (let d = 0; d <= AHEAD; d++) {
       for (const k of [c + d, c - d]) {
-        if (k < 0 || k >= FRAMES || !frames[k] || bitmaps.has(k) || decoding.has(k)) continue;
+        if (k < 0 || k >= FRAMES) continue;
+        if (!hq[k]) { askSharp(k); continue; }
+        if (bitmaps.has(k) || decoding.has(k)) continue;
         decoding.add(k);
-        createImageBitmap(frames[k])
+        createImageBitmap(hq[k])
           .then((bmp) => {
             decoding.delete(k);
             if (Math.abs(k - shown) > AHEAD * 1.5) return bmp.close?.();
             bitmaps.set(k, bmp);
+            dirty = true;
           })
           .catch(() => decoding.delete(k));
       }
     }
   }
-  // El cuadro decodificado más cercano a i (hacia atrás primero, para no adelantarse a la historia).
-  const nearest = (i) => {
-    for (let d = 0; d < FRAMES; d++) {
-      if (bitmaps.has(i - d)) return i - d;
-      if (bitmaps.has(i + d)) return i + d;
+  // Lo mejor que haya para el cuadro i: nítido, o liviano, o el liviano más cercano.
+  const best = (i) => {
+    if (bitmaps.has(i)) return bitmaps.get(i);
+    if (lq[i]) return lq[i];
+    for (let d = 1; d < 16; d++) {
+      if (lq[i - d]) return lq[i - d];
+      if (lq[i + d]) return lq[i + d];
     }
-    return -1;
+    return null;
   };
-
-  // Grano de película: un ruido pequeño que se repite y se mueve cada cuadro.
-  const grain = document.createElement('canvas');
-  grain.width = grain.height = 160;
-  {
-    const g = grain.getContext('2d');
-    const data = g.createImageData(160, 160);
-    for (let k = 0; k < data.data.length; k += 4) {
-      const v = Math.random() * 255;
-      data.data[k] = data.data[k + 1] = data.data[k + 2] = v;
-      data.data[k + 3] = 14;
-    }
-    g.putImageData(data, 0, 0);
-  }
 
   // ---------- Textos ----------
   // GSAP llega aparte (cdnjs, en paralelo). Mientras no está, o sin internet, los textos aparecen sin animación de letras.
@@ -141,7 +150,7 @@ export function startFilm({ onEnd } = {}) {
   const tryCaptions = () => {
     if (captions || reduced || typeof gsap === 'undefined') return;
     for (const c of caps) c.style.cssText = '';
-    captions = buildCaptions(caps);
+    captions = makeCaptions(caps);
   };
   const showPlain = (shot) => caps.forEach((c, k) => {
     const [start, end] = WINDOWS[k] ?? [k + 0.15, k + 0.75];
@@ -169,74 +178,71 @@ export function startFilm({ onEnd } = {}) {
   };
   addEventListener('scroll', onScroll, { passive: true });
 
-  // El lienzo usa como máximo la resolución de la película: menos píxeles que pintar.
-  let cover = null;
+  // El lienzo usa la resolución de la pantalla, hasta 1920 px de ancho.
   const size = () => {
-    const w = Math.min(1600, canvas.clientWidth * (devicePixelRatio || 1));
+    const w = Math.min(1920, canvas.clientWidth * (devicePixelRatio || 1));
     canvas.width = Math.round(w);
     canvas.height = Math.round((w * canvas.clientHeight) / Math.max(1, canvas.clientWidth));
-    cover = null;
+    dirty = true;
   };
   new ResizeObserver(size).observe(canvas);
-  const blit = (bmp, alpha) => {
-    if (!cover) {
-      const s = Math.max(canvas.width / bmp.width, canvas.height / bmp.height);
-      const w = bmp.width * s;
-      const h = bmp.height * s;
-      cover = [(canvas.width - w) / 2, (canvas.height - h) / 2, w, h];
-    }
+  // "cover": la imagen llena la pantalla sin deformarse, venga del cuadro liviano o del nítido.
+  const blit = (src, alpha) => {
+    const iw = src.naturalWidth || src.width;
+    const ih = src.naturalHeight || src.height;
+    const s = Math.max(canvas.width / iw, canvas.height / ih);
     ctx.globalAlpha = alpha;
-    ctx.drawImage(bmp, ...cover);
+    ctx.drawImage(src, (canvas.width - iw * s) / 2, (canvas.height - ih * s) / 2, iw * s, ih * s);
   };
+  const chapterEl = $('filmChapter');
+  let chapter = -1;
 
   let last = performance.now();
   let lastDecode = -1;
+  let drawnAt = -1;
   function frame(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    const visible = section.getBoundingClientRect().bottom > 0 && !section.hidden;
+    const visible = !section.hidden && section.getBoundingClientRect().bottom > 0;
     if (visible) {
       // Suavizado que no depende de los fps de la pantalla (60, 120 o 144 Hz se ven igual).
-      shown += (target - shown) * (reduced ? 1 : 1 - Math.exp(-dt * 9));
-      if (Math.abs(target - shown) < 0.002) shown = target;
+      shown += (target - shown) * (reduced ? 1 : 1 - Math.exp(-dt * 12));
+      if (Math.abs(target - shown) < 0.01) shown = target;
       if (Math.round(shown) !== lastDecode) {
         lastDecode = Math.round(shown);
         decodeAround();
       }
-      const a = Math.floor(shown);
-      const t = shown - a;
-      const ka = bitmaps.has(a) ? a : nearest(a);
       const p = shown / (FRAMES - 1);
-      if (ka >= 0) {
-        const W = canvas.width;
-        const H = canvas.height;
-        ctx.imageSmoothingQuality = 'high';
-        blit(bitmaps.get(ka), 1);
-        // Fundido con el cuadro siguiente: el paso entre cuadros no se nota.
-        if (ka === a && t > 0.02 && bitmaps.has(a + 1)) blit(bitmaps.get(a + 1), t);
-        ctx.globalAlpha = 1;
-        const v = ctx.createRadialGradient(W / 2, H / 2, H * 0.4, W / 2, H / 2, Math.max(W, H) * 0.75);
-        v.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        v.addColorStop(1, 'rgba(0, 0, 0, 0.45)');
-        ctx.fillStyle = v;
-        ctx.fillRect(0, 0, W, H);
-        if (!reduced) {
-          ctx.save();
-          ctx.translate((Math.random() * 160) | 0, (Math.random() * 160) | 0);
-          ctx.fillStyle = ctx.createPattern(grain, 'repeat');
-          ctx.fillRect(-160, -160, W + 160, H + 160);
-          ctx.restore();
+      if (dirty || Math.abs(shown - drawnAt) > 0.004) {
+        const a = Math.floor(shown);
+        const t = shown - a;
+        const base = best(a);
+        if (base) {
+          ctx.imageSmoothingQuality = 'high';
+          blit(base, 1);
+          // Fundido con el cuadro siguiente: el paso entre cuadros no se nota.
+          const nxt = t > 0.04 ? best(a + 1) : null;
+          if (nxt && nxt !== base) blit(nxt, t);
+          ctx.globalAlpha = 1;
+          // Al final, la imagen se funde con el fondo del simulador.
+          if (p > 0.95) {
+            ctx.fillStyle = `rgba(10, 6, 16, ${(p - 0.95) / 0.05})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+          }
+          drawnAt = shown;
+          dirty = false;
         }
-        // Al final, la imagen se funde con el fondo del simulador.
-        if (p > 0.95) {
-          ctx.fillStyle = `rgba(10, 6, 16, ${(p - 0.95) / 0.05})`;
-          ctx.fillRect(0, 0, W, H);
+        bar.style.transform = `scaleX(${p})`;
+        // Capítulo actual: número, nombre y puntos.
+        const ch = Math.min(SHOTS - 1, Math.floor(p * SHOTS));
+        if (ch !== chapter && chapterEl) {
+          chapter = ch;
+          chapterEl.innerHTML = `<b>${ch + 1}<small>/${SHOTS}</small></b><span>${CHAPTERS[ch]}</span><i>${CHAPTERS.map((_, k) => `<em class="${k <= ch ? 'on' : ''}"></em>`).join('')}</i>`;
         }
+        tryCaptions();
+        if (captions) captions.update(p * SHOTS);
+        else showPlain(p * SHOTS);
       }
-      bar.style.transform = `scaleX(${p})`;
-      tryCaptions();
-      if (captions) captions.progress(p);
-      else showPlain(p * SHOTS);
     }
     requestAnimationFrame(frame);
   }

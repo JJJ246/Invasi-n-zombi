@@ -23,3 +23,10 @@ Ambas se redujeron de tamaño y se convirtieron a WebP.
 ## Librerías
 - [GSAP 3.13](https://gsap.com/) (licencia estándar de GSAP, uso gratuito): animación letra por letra de los textos de la historia.
 - [Chart.js 4.4](https://www.chartjs.org/) (MIT): curvas y calibración.
+
+## Película de la portada (Higgsfield)
+- `web/pelicula/`: 7 tomas generadas con Higgsfield (27-oct) y mejoradas a 2K con Bytedance Video Upscale; 420 cuadros en dos calidades.
+
+## Halloween y prototipo del barrio (Higgsfield)
+- `web/img/halloween/`: patrón, calabaza, murciélagos, telaraña y velas (GPT Image 2.5).
+- `web/img/prueba/`: cinco barrios de Manta y sus máscaras de calles (GPT Image 2.5), seis vecinos, zombi, dengue y vacunado; ciclos de caminata con Kling 3.0 Turbo sobre fondo verde; video del mosquito (Kling 3.0 Turbo).

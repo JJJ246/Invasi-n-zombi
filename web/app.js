@@ -529,7 +529,7 @@ function render(s, seconds) {
 
   $('planTitle').textContent = `El plan para ${city.name}`;
   countUp($('kSavedNone'), s.savedVsNone.mean);
-  $('savedLabel').textContent = `personas que no terminan ${T.bittenM} gracias al plan`;
+  $('savedLabel').textContent = `personas que no terminan ${T.bitten} gracias al plan`;
   const fizzled = s.runs - s.takeoffRuns;
   $('headline').textContent = `Promedio de ${fmt(s.runs)} simulaciones, comparado con no hacer nada.${fizzled > 0 ? ` En ${fizzled} de ellas el brote se apagó solo.` : ''}`;
   $('planSteps').innerHTML = planItems(s);

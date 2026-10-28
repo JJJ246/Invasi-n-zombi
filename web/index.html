@@ -12,7 +12,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Creepster&family=Special+Elite&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-  <link rel="preload" as="image" href="pelicula/000.webp" fetchpriority="high">
+  <link rel="preload" as="image" href="pelicula/lq/000.webp" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js" integrity="sha512-NcZdtrT77bJr4STcmsGAESr06BYGE8woZdSdEgqnpyqac7sugNO+Tr4bGwGF3MsnEkGKhU2KL2xh6Ec+BqsaHA==" crossorigin="anonymous" referrerpolicy="no-referrer" async></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw==" crossorigin="anonymous" referrerpolicy="no-referrer" async></script>
@@ -57,6 +57,7 @@
 
   <!-- Fondo: la película de la portada, lenta y oscura, y niebla que avanza. -->
   <div class="bg-film" aria-hidden="true"></div>
+  <div class="bg-pattern" aria-hidden="true"></div>
   <div class="fog" aria-hidden="true"><i></i><i></i><i></i></div>
 
   <header class="top">
@@ -77,6 +78,9 @@
   <section class="film" id="historia" aria-label="Historia: una noche en Manta">
     <div class="film-sticky">
       <canvas id="filmCanvas"></canvas>
+      <div class="film-grain" aria-hidden="true"></div>
+      <div class="film-vignette" aria-hidden="true"></div>
+      <div class="film-chapter" id="filmChapter" aria-hidden="true"></div>
       <!-- Un texto por escena. historia.js lo anima letra por letra con GSAP según data-anim y lo ubica según data-pos. -->
       <div class="captions">
         <div class="cap" data-pos="abajo" data-anim="sube"><span class="time">31 de octubre · 23:47</span><h2 class="hl">Manta duerme</h2><p class="sub">Los barcos atuneros se mecen en la bahía.</p></div>
@@ -101,11 +105,13 @@
     <span class="anchor" id="simulador"></span>
     <section class="screen setup-screen" id="setupScreen">
       <div class="intro">
+        <img class="deco deco-web" src="img/halloween/telarana.webp" alt="" aria-hidden="true">
+        <img class="deco deco-bats" src="img/halloween/murcielagos.webp" alt="" aria-hidden="true">
         <h1>¿Cómo frenamos la plaga?</h1>
         <p class="lead">Elige el brote, pulsa <b>Calcular</b> y mira cuántas vidas salva el mejor plan.</p>
         <ul class="facts">
           <li><svg class="ic"><use href="#i-users"/></svg>10.000 vecinos de Manta</li>
-          <li><svg class="ic"><use href="#i-bio"/></svg><span id="nPlans">21</span>&nbsp;planes probados</li>
+          <li><svg class="ic"><use href="#i-bio"/></svg><span><span id="nPlans">21</span> planes probados</span></li>
           <li><svg class="ic"><use href="#i-dice"/></svg>Contra no hacer nada y contra el azar</li>
         </ul>
       </div>
@@ -149,9 +155,11 @@
             <span class="value"><output id="budgetOut"></output></span>
             <input type="range" name="budget" min="0" max="10000000" step="10000">
           </label>
+          <img class="deco deco-candles" src="img/halloween/velas.webp" alt="" aria-hidden="true">
         </section>
 
         <div class="run">
+          <img class="deco deco-pumpkin" src="img/halloween/calabaza.webp" alt="" aria-hidden="true">
           <button type="submit" class="primary" id="runBtn" disabled><svg class="ic"><use href="#i-play"/></svg>Calcular el mejor plan</button>
           <label class="seed">Semilla <input type="number" name="seed" min="0" max="4294967295" step="1"></label>
           <span id="status" class="status" aria-live="polite">Corre en tu navegador, en segundos.</span>
@@ -163,8 +171,8 @@
               <label>El Comité actúa desde el día <input type="number" name="responseStartDay" min="0" max="120"></label>
               <label>Llegan las vacunas el día <input type="number" name="vaccineStartDay" min="0" max="120"></label>
               <label>Días a simular <input type="number" name="days" min="30" max="365"></label>
-              <label>Parte de los casos que se reporta (0 a 1) <input type="number" name="detectionProb" min="0.01" max="1" step="any"></label>
-              <label>Parte de los hogares que cumple la cuarentena (0 a 1) <input type="number" name="quarantineCompliance" min="0" max="1" step="any"></label>
+              <label>Parte de los casos que se reportan (0 a 1) <input type="number" name="detectionProb" min="0.01" max="1" step="any"></label>
+              <label>Parte de los hogares que cumplen la cuarentena (0 a 1) <input type="number" name="quarantineCompliance" min="0" max="1" step="any"></label>
               <label>Costo de cada dosis (USD) <input type="number" name="costPerDose" min="0" max="1000" step="1"></label>
               <label>Cuarentena, por hogar y día (USD) <input type="number" name="quarantineCostPerHouseholdDay" min="0" max="10000" step="1"></label>
               <label>Cerrar una zona, por día (USD) <input type="number" name="closureCostPerDay" min="0" max="1000000" step="500"></label>
