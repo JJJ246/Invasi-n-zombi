@@ -24,6 +24,29 @@ const LAYOUTS = {
   trabajo: { work: [1, 1], market: [2, 1], school: [1, 0], plaza: [2, 2] },
   escuela: { school: [1, 1], market: [1, 0], work: [2, 1], plaza: [2, 2] },
 };
+// Piezas de los edificios (casas, puesto del mercado, colegio, iglesia, trabajos) generadas con
+// Higgsfield en perspectiva isométrica y fondo transparente. sprites.json guarda el punto más bajo de
+// cada pieza (su esquina de adelante), que se apoya en la esquina de adelante de su casilla.
+const SPRITE = {};
+fetch('img/sims/sprites.json')
+  .then((r) => r.json())
+  .then((meta) => {
+    for (const [name, m] of Object.entries(meta)) {
+      const img = new Image();
+      img.src = `img/sims/${name}.webp`;
+      SPRITE[name] = { ...m, img };
+    }
+  })
+  .catch(() => {}); // sin piezas, el barrio se dibuja con cajas como antes
+const WORK_SPRITE = { oficinas: 'oficinas', atunera: 'atunera', astillero: 'astillero', laboratorio: 'laboratorio', fabrica: 'fabrica' };
+// Qué pieza usa cada casa según sus pisos, su techo y si es de caña o palafito.
+const houseSprite = (hs) => {
+  if (hs.stilts || hs.cana) return 'casa_cana';
+  if (hs.stories >= 3) return 'casa3_centro';
+  if (hs.stories === 2) return pick(['casa2_amarilla', 'casa2_tienda', 'casa2_verde'], hash(hs.home, 51));
+  if (hs.roof === 'teja') return 'casa1_teja';
+  return pick(hs.roof === 'zinc' ? ['casa1_azul', 'casa1_verde', 'casa1_blanca'] : ['casa1_rosada', 'casa1_naranja'], hash(hs.home, 51));
+};
 // Foto de cada parroquia de Manta (generada con Higgsfield) para la tarjeta del barrio.
 const ZONE_PHOTO = { Tarqui: 'tarqui', Manta: 'manta', 'Los Esteros': 'esteros', 'San Mateo': 'sanmateo', 'Eloy Alfaro': 'eloy' };
 const STATE_COLOR = ['#5fd38d', '#facc15', '#ff3b3b', '#60a5fa', '#2dd4bf'];
@@ -457,7 +480,7 @@ export class Barrio {
       if (hash(hs.home, 42) < 0.5) out.push({ type: 'maceta', x: hs.x + 0.82, y: hs.y + 1.14 });
     }
     const sa = this.places.school.area;
-    out.push({ type: 'bandera', x: sa.x + 0.5, y: sa.y + 0.5 }, { type: 'aro', x: sa.x + sa.w - 0.6, y: sa.y + sa.h / 2 });
+    out.push({ type: 'aro', x: sa.x + sa.w - 0.6, y: sa.y + sa.h / 2 });
     const ma = this.places.market.area;
     out.push({ type: 'tacho', x: ma.x + ma.w - 0.3, y: ma.y + ma.h - 0.3 }, { type: 'tacho', x: sa.x + 0.3, y: sa.y + sa.h - 0.3 });
     for (let k = 0; k < 6; k++) {
@@ -756,7 +779,31 @@ export class Barrio {
     return out;
   }
 
+  // Dibuja una pieza sobre la base (x, y, w, h). Devuelve false si todavía no cargó.
+  sprite(ctx, name, x, y, w, h, dark = false) {
+    const s = SPRITE[name];
+    if (!s?.img.complete || !s.img.naturalWidth) return false;
+    const k = ((w + h) * this.tw) / 2 / s.w * 1.04;
+    const [bx, by] = this.P(x + w, y + h);
+    ctx.save();
+    if (dark) ctx.filter = 'brightness(0.55) saturate(0.6)';
+    if (this.mirror) {
+      // Visto desde el otro lado: la pieza se refleja para que el lado largo quede donde corresponde.
+      ctx.translate(bx, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(s.img, -s.bottom[0] * k, by - s.bottom[1] * k, s.w * k, s.h * k);
+    } else ctx.drawImage(s.img, bx - s.bottom[0] * k, by - s.bottom[1] * k, s.w * k, s.h * k);
+    ctx.restore();
+    return true;
+  }
+
   drawHouse(ctx, hs, night, quarantined) {
+    if (this.sprite(ctx, houseSprite(hs), hs.x, hs.y, 1, 1)) {
+      hs.sprite = true;
+      if (quarantined) this.tape(ctx, hs.x, hs.y, 0);
+      return;
+    }
+    hs.sprite = false;
     const base = hs.stilts ? 0.25 : 0;
     const b = { x: hs.x, y: hs.y, w: 1, h: 1, z: hs.z };
     if (hs.stilts) {
@@ -831,17 +878,22 @@ export class Barrio {
       ctx.fillStyle = '#4f8fe8';
       ctx.fill();
     }
-    if (quarantined) {
-      // Cinta morada en la fachada: hogar en cuarentena.
-      ctx.lineWidth = Math.max(1.5, this.tw * 0.06);
-      ctx.strokeStyle = '#c084fc';
-      ctx.beginPath();
-      ctx.moveTo(...this.P(b.x, b.y + 1, base + 0.55));
-      ctx.lineTo(...this.P(b.x + 1, b.y + 1, base + 0.08));
-      ctx.moveTo(...this.P(b.x, b.y + 1, base + 0.08));
-      ctx.lineTo(...this.P(b.x + 1, b.y + 1, base + 0.55));
-      ctx.stroke();
-    }
+    if (quarantined) this.tape(ctx, b.x, b.y, base);
+  }
+
+  // Cinta morada en la fachada: hogar en cuarentena.
+  tape(ctx, x, y, base) {
+    ctx.lineWidth = Math.max(1.5, this.tw * 0.06);
+    ctx.strokeStyle = '#c084fc';
+    ctx.shadowColor = '#c084fc';
+    ctx.shadowBlur = this.tw * 0.15;
+    ctx.beginPath();
+    ctx.moveTo(...this.P(x, y + 1.02, base + 0.55));
+    ctx.lineTo(...this.P(x + 1, y + 1.02, base + 0.08));
+    ctx.moveTo(...this.P(x, y + 1.02, base + 0.08));
+    ctx.lineTo(...this.P(x + 1, y + 1.02, base + 0.55));
+    ctx.stroke();
+    ctx.shadowBlur = 0;
   }
 
   drawTree(ctx, d, now) {
@@ -948,6 +1000,7 @@ export class Barrio {
   }
 
   drawChurch(ctx, d, night) {
+    if (this.sprite(ctx, 'iglesia', d.x, d.y, 4.1, 2)) return;
     const body = { x: d.x, y: d.y, w: 3.2, h: 2, z: 1.4 };
     this.box(ctx, body, '#efe6d2', '#b4643c', 'teja');
     const tower = { x: d.x + 3.2, y: d.y + 1, w: 0.9, h: 0.9, z: 2.8 };
@@ -1073,6 +1126,7 @@ export class Barrio {
   }
 
   drawStall(ctx, x, y, k, closed) {
+    if (this.sprite(ctx, 'puesto', x, y, 1.4, 1, closed)) return;
     const b = { x, y, w: 1.4, h: 1, z: 0.5 };
     this.box(ctx, b, '#8a6440', '#8a6440');
     const colors = [['#e85d5d', '#f4efe2'], ['#4f8fe8', '#f4efe2'], ['#f2c94c', '#e85d5d'], ['#5bbf8a', '#f4efe2']][k % 4];
@@ -1105,6 +1159,7 @@ export class Barrio {
   // Edificio de trabajo según el tipo: atunera con chimenea, astillero con un barco, oficinas de vidrio…
   drawWork(ctx, w, night, now) {
     const b = w.box;
+    if (WORK_SPRITE[w.kind] && this.sprite(ctx, WORK_SPRITE[w.kind], b.x, b.y, b.w, b.h)) return;
     const glass = night > 0.3 ? 'rgba(255, 214, 120, 0.8)' : '#3b5268';
     if (w.kind === 'bodegas') {
       for (const dy of [0, 2]) {
@@ -1501,6 +1556,7 @@ export class Barrio {
     }
     const sb = this.places.school;
     items.push({ key: sb.box.x + sb.box.y + (sb.box.w + sb.box.h) / 2, draw: () => {
+      if (this.sprite(ctx, 'colegio', sb.box.x, sb.box.y, sb.box.w, sb.box.h)) return;
       this.box(ctx, sb.box, sb.wall, sb.roof, 'losa', 0, { texture: true });
       this.pane(ctx, 'y', sb.box, 0, sb.box.w, 0, 0.22, '#3d6fb0');
       this.pane(ctx, 'y', sb.box, 0, sb.box.w, 0.22, 0.27, '#f2c94c');
@@ -1578,6 +1634,18 @@ export class Barrio {
       ctx.globalAlpha = night;
       for (const hs of this.houses) {
         const b = { x: hs.x, y: hs.y, w: 1, h: 1 };
+        if (hs.sprite) {
+          // Casas de Higgsfield: luz cálida que sale por la fachada.
+          if (hash(hs.home, 52) < 0.75) {
+            const [gx, gy] = this.P(hs.x + 0.5, hs.y + 1, 0.35);
+            const g = ctx.createRadialGradient(gx, gy, 0, gx, gy, this.tw * 0.55);
+            g.addColorStop(0, 'rgba(255, 200, 110, 0.55)');
+            g.addColorStop(1, 'rgba(255, 200, 110, 0)');
+            ctx.fillStyle = g;
+            ctx.fillRect(gx - this.tw * 0.6, gy - this.tw * 0.6, this.tw * 1.2, this.tw * 1.2);
+          }
+          continue;
+        }
         for (const [f, a0, a1, z0, z1] of this.windowsOf(hs)) if (hash(hs.home, Math.round(z0 * 10 + a0 * 100)) < 0.7) this.pane(ctx, f, b, a0, a1, z0, z1, '#ffd678', hs.stilts ? 0.25 : 0);
       }
       for (const c of ROADS) {
