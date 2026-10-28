@@ -8,6 +8,7 @@ import { renderVecino, interestingPeople } from './vecino.js';
 import { CALIBRATION } from './engine/calibration.js';
 import { DENGUE_MANABI_2024 } from './engine/dengue-manabi-2024.js';
 import { SCENARIOS } from './escenarios.js';
+import { startFilm } from './pelicula.js';
 
 const API_URL = (window.APP_CONFIG && window.APP_CONFIG.apiUrl) || '';
 const form = document.getElementById('controls');
@@ -66,17 +67,34 @@ function showScreen(name, animate = true) {
     screen = name;
     $('setupScreen').hidden = name !== 'setup';
     $('resultsScreen').hidden = name !== 'results';
+    // La historia vive arriba de "Preparar"; con el plan a la vista se esconde para que todo quepa.
+    $('historia').hidden = name === 'results';
     document.body.classList.toggle('on-results', name === 'results');
-    document.querySelectorAll('[data-screen]').forEach((b) => b.classList.toggle('on', b.dataset.screen === name));
+    document.querySelectorAll('.stepper [data-screen]').forEach((b) => b.classList.toggle('on', b.dataset.screen === name));
     barrio.setActive(name === 'results' && view === 'barrio');
-    scrollTo(0, 0);
+    if (name === 'results') scrollTo(0, 0);
+    else toSetup('instant');
   };
   animate ? wipe(swap) : swap();
 }
-document.querySelector('.stepper').addEventListener('click', (e) => {
+const toSetup = (behavior = 'smooth') => scrollTo({ top: $('setupScreen').getBoundingClientRect().top + scrollY - 64, behavior });
+// "La historia": vuelve al principio de la película.
+function toStory() {
+  if (screen === 'results') showScreen('setup');
+  requestAnimationFrame(() => setTimeout(() => scrollTo({ top: 0, behavior: 'smooth' }), screen === 'setup' ? 0 : 700));
+}
+document.addEventListener('click', (e) => {
   const b = e.target.closest('[data-screen]');
-  if (b && !b.disabled) showScreen(b.dataset.screen);
+  if (!b || b.disabled) return;
+  e.preventDefault();
+  if (b.dataset.screen === 'historia') toStory();
+  else if (b.dataset.screen === 'setup' && screen === 'setup') toSetup();
+  else showScreen(b.dataset.screen);
 });
+$('skipFilm').addEventListener('click', () => toSetup());
+// Al terminar la historia, la página entra sola al simulador.
+startFilm({ onEnd: () => screen === 'setup' && toSetup() });
+if (location.hash === '#simulador') requestAnimationFrame(() => toSetup('instant'));
 $('backBtn').addEventListener('click', () => showScreen('setup'));
 // Al ir a la portada, la cortina cae antes de cambiar de página.
 for (const a of document.querySelectorAll('a[data-wipe]')) {
@@ -360,6 +378,7 @@ async function simulate(surprise = null) {
         setBusy(false);
         $('resultsScreen').hidden = false;
         $('setupScreen').hidden = true;
+        $('historia').hidden = true;
         screen = 'results';
         document.body.classList.add('on-results');
         document.querySelector('[data-screen="results"]').disabled = false;
@@ -572,55 +591,26 @@ function drawCalibration() {
     `El motor, sin intervenir, sigue la curva real (R² de ${String(c.r2).replace('.', ',')}) con cada caso contagiando a ${String(c.r0).replace('.', ',')} personas.`;
 }
 
-// ---------- La película de la portada, de fondo ----------
-// Cada tercer cuadro, lento y con fundido. Se carga después de todo lo demás.
-function filmBackdrop() {
-  const canvas = $('bgFilm');
-  if (reduced || innerWidth < 700) return;
-  const ctx = canvas.getContext('2d');
-  const frames = [];
-  for (let k = 0; k < 432; k += 3) frames.push(`film/${String(k).padStart(3, '0')}.webp`);
-  const imgs = [];
-  let next = 0;
-  const loadMore = () => {
-    if (next >= frames.length) return;
-    const img = new Image();
-    img.onload = img.onerror = () => { img.ready = img.naturalWidth > 0; loadMore(); };
-    img.src = frames[next++];
-    imgs.push(img);
-  };
-  loadMore();
-  loadMore();
-  const draw = (img, alpha) => {
-    const w = canvas.width;
-    const h = canvas.height;
-    const k = Math.max(w / img.naturalWidth, h / img.naturalHeight);
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(img, (w - img.naturalWidth * k) / 2, (h - img.naturalHeight * k) / 2, img.naturalWidth * k, img.naturalHeight * k);
-  };
-  const t0 = performance.now();
-  const loop = (now) => {
-    if (screen === 'setup' && !document.hidden) {
-      const w = Math.min(960, innerWidth);
-      const h = Math.round((w * innerHeight) / innerWidth);
-      if (canvas.width !== w || canvas.height !== h) [canvas.width, canvas.height] = [w, h];
-      const ready = imgs.filter((x) => x.ready);
-      if (ready.length) {
-        const f = ((now - t0) / 1000) * 6; // 6 cuadros por segundo: cámara lenta
-        const a = Math.floor(f) % ready.length;
-        draw(ready[a], 1);
-        draw(ready[(a + 1) % ready.length], f % 1);
-        ctx.globalAlpha = 1;
-      }
-    }
-    requestAnimationFrame(loop);
-  };
-  requestAnimationFrame(loop);
-}
-
 form.addEventListener('input', updateOutputs);
+// Calcular: un zombi se lanza contra la cámara y se traga la pantalla mientras el Comité empieza a calcular.
+function zombieCut() {
+  const v = $('zombieCut');
+  if (reduced || !v.canPlayType('video/mp4')) return;
+  v.hidden = false;
+  v.classList.remove('out');
+  v.currentTime = 0;
+  v.volume = 0.55;
+  v.play().catch(() => (v.hidden = true));
+  const end = () => {
+    v.classList.add('out');
+    setTimeout(() => { v.hidden = true; v.pause(); }, 600);
+  };
+  v.onended = end;
+  setTimeout(() => !v.hidden && !v.classList.contains('out') && end(), 6000);
+}
 form.addEventListener('submit', (e) => {
   e.preventDefault();
+  if (!busy) zombieCut();
   simulate();
 });
 form.addEventListener('keydown', (e) => {
@@ -647,5 +637,4 @@ applyScenario('zombi', { runs: 100 });
 const whenLoaded = (fn) => (document.readyState === 'complete' ? fn() : window.addEventListener('load', fn));
 whenLoaded(() => {
   drawCalibration();
-  filmBackdrop();
 });
