@@ -1,6 +1,6 @@
 import { makeConfig } from './engine/config.js';
 import { CITIES } from './engine/cities.js';
-import { headline, mayorReport, TERMS } from './engine/report.js';
+import { mayorReport, TERMS } from './engine/report.js';
 import { CityPlayer } from './city.js';
 import { Barrio } from './barrio.js';
 import { ContagionMap } from './contagio.js';
@@ -14,6 +14,8 @@ const form = document.getElementById('controls');
 const $ = (id) => document.getElementById(id);
 const fmt = (x) => Math.round(x).toLocaleString('es-EC');
 const usd = (x) => `USD ${fmt(x)}`;
+const pct = (x) => `${Math.round(x * 100)} %`;
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 const FIELDS = [
   'city', 'r0', 'dosesPerDay', 'vaccineEfficacy', 'budget', 'start', 'initialInfected', 'responseStartDay', 'vaccineStartDay',
@@ -21,16 +23,18 @@ const FIELDS = [
   'seed', 'runs', 'latentMin', 'latentMax', 'infectiousMin', 'infectiousMax',
 ];
 const TEXT_FIELDS = new Set(['city', 'start']);
-const LABELS = { nada: 'Sin hacer nada', azar: 'Mismos recursos, al azar', adaptativa: 'Plan del Comité' };
-const COLORS = { nada: '#ef5350', azar: '#f2b33d', adaptativa: '#34c77b' };
-const PRIORITY = { anillo: 'El entorno de los casos, los más conectados primero', mixto: 'Mezcla: entorno de casos y más conectados', conectados: 'Los más conectados de la ciudad' };
+const LABELS = { nada: 'Sin hacer nada', azar: 'Lo mismo, al azar', adaptativa: 'Plan del Comité' };
+const COLORS = { nada: '#e5383b', azar: '#f5b83d', adaptativa: '#8be04e' };
+const PRIORITY = { anillo: 'Quienes rodean a los casos', mixto: 'Entorno de los casos y los más conectados', conectados: 'Los más conectados de la ciudad' };
+const PRIORITY_SHORT = { anillo: 'quienes rodean a cada caso', mixto: 'el entorno de los casos y los más conectados', conectados: 'quienes ven a más gente cada día' };
+const toWho = (key) => (PRIORITY_SHORT[key].startsWith('el ') ? `al ${PRIORITY_SHORT[key].slice(3)}` : `a ${PRIORITY_SHORT[key]}`);
 
 const PRESET_LABELS = {
-  doble: 'el doble de contagioso',
-  mitad: 'la mitad de vacunas',
+  doble: 'el doble de contagio',
+  mitad: 'la mitad de las vacunas',
   mercado: 'empieza en otro mercado',
-  variante: 'la vacuna protege a medias',
-  tarde: 'se actúa 10 días tarde',
+  variante: 'una variante que la vacuna cubre a medias',
+  tarde: 'el Comité llega 10 días tarde',
   pobre: 'la mitad del presupuesto',
 };
 
@@ -39,21 +43,65 @@ let busy = false;
 let previous = null; // último resultado, para mostrar qué cambió tras un Brote Sorpresa
 let scenario = 'zombi';
 const terms = () => TERMS[SCENARIOS[scenario].theme];
-const player = new CityPlayer(document.querySelector('.city'));
+const player = new CityPlayer($('cityCard'));
 const barrio = new Barrio($('barrio'), player);
 const tree = new ContagionMap($('treeCard'), player);
+window.__comite = { player, barrio, tree }; // para las pruebas automáticas
 
-// Vista: el barrio de cerca (vecinos caminando, al estilo de un juego) o toda la ciudad (tres mapas).
-function setView(view) {
-  const isBarrio = view === 'barrio';
-  for (const b of document.querySelectorAll('[data-view]')) b.setAttribute('aria-selected', String(b.dataset.view === view));
-  $('barrio').hidden = !isBarrio;
-  document.querySelector('.city-grid').hidden = isBarrio;
-  $('barrioNote').hidden = !isBarrio;
-  $('mapNote').hidden = isBarrio;
-  $('cityEvents').hidden = isBarrio;
-  barrio.setActive(isBarrio);
-  if (!isBarrio && player.trace) player.resize();
+// ---------- Pantallas y transición ----------
+const wipeEl = $('wipe');
+// Cortina que cae, cambia lo de atrás y se va hacia abajo.
+function wipe(middle) {
+  if (reduced) return middle();
+  wipeEl.className = 'wipe down';
+  wipeEl.addEventListener('animationend', () => {
+    middle();
+    wipeEl.className = 'wipe up';
+  }, { once: true });
+}
+let screen = 'setup';
+function showScreen(name, animate = true) {
+  if (name === screen) return;
+  const swap = () => {
+    screen = name;
+    $('setupScreen').hidden = name !== 'setup';
+    $('resultsScreen').hidden = name !== 'results';
+    document.body.classList.toggle('on-results', name === 'results');
+    document.querySelectorAll('[data-screen]').forEach((b) => b.classList.toggle('on', b.dataset.screen === name));
+    barrio.setActive(name === 'results' && view === 'barrio');
+    scrollTo(0, 0);
+  };
+  animate ? wipe(swap) : swap();
+}
+document.querySelector('.stepper').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-screen]');
+  if (b && !b.disabled) showScreen(b.dataset.screen);
+});
+$('backBtn').addEventListener('click', () => showScreen('setup'));
+// Al ir a la portada, la cortina cae antes de cambiar de página.
+for (const a of document.querySelectorAll('a[data-wipe]')) {
+  a.addEventListener('click', (e) => {
+    if (reduced || e.metaKey || e.ctrlKey) return;
+    e.preventDefault();
+    wipeEl.className = 'wipe down';
+    wipeEl.addEventListener('animationend', () => (location.href = a.href), { once: true });
+  });
+}
+if (!reduced && /portada/.test(document.referrer)) {
+  wipeEl.style.transform = 'translateY(0)';
+  requestAnimationFrame(() => { wipeEl.style.transform = ''; wipeEl.className = 'wipe up'; });
+}
+
+// ---------- Vistas: barrio, ciudad, curva, informe ----------
+let view = 'barrio';
+function setView(name) {
+  view = name;
+  for (const b of document.querySelectorAll('[data-view]')) b.setAttribute('aria-selected', String(b.dataset.view === name));
+  for (const p of document.querySelectorAll('[data-pane]')) p.hidden = p.dataset.pane !== name;
+  $('legend').hidden = !(name === 'barrio' || name === 'mapa');
+  $('cityCard').querySelector('.city-controls').style.visibility = name === 'barrio' || name === 'mapa' ? '' : 'hidden';
+  barrio.setActive(name === 'barrio' && screen === 'results');
+  if (name === 'mapa' && player.trace) player.resize();
   if (player.playing) {
     player.pause(); // vuelve a arrancar con la nueva velocidad
     player.play();
@@ -65,19 +113,18 @@ document.querySelector('.view-tabs').addEventListener('click', (e) => {
 });
 setView('barrio');
 
-// ---------- Escenarios y ciudad ----------
-const SCENARIO_ICON = { zombi: 'i-hand', influenza: 'i-virus', dengue: 'i-mosquito', nino: 'i-rain' };
+// ---------- Escenarios ----------
 $('scenarios').innerHTML = Object.entries(SCENARIOS)
-  .map(([key, s]) => `<label class="scenario"><input type="radio" name="scenario" value="${key}"><span class="sc-ic"><svg class="ic"><use href="#${SCENARIO_ICON[key]}"/></svg></span><b>${s.title}</b><span class="sub">${s.sub}</span></label>`)
+  .map(([key, s]) => `<label class="scenario"><input type="radio" name="scenario" value="${key}">${s.art}<b>${s.title}</b><span class="sub">${s.sub}</span><span class="tag">${s.tag}</span></label>`)
   .join('');
 
 function fillStart(city, value) {
   const zones = CITIES[city].zones;
   const options = [
     ...zones.map((z) => [`mercado:${z}`, `Mercado de ${z}`]),
-    ...zones.map((z) => [`parroquia:${z}`, `En casas de ${z}`]),
-    ['colegio', 'En un colegio'],
-    ['aleatorio', 'En cualquier lugar (al azar)'],
+    ...zones.map((z) => [`parroquia:${z}`, `Una casa en ${z}`]),
+    ['colegio', 'Un colegio'],
+    ['aleatorio', 'Cualquier lugar (al azar)'],
   ];
   form.elements.start.innerHTML = options.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
   form.elements.start.value = options.some(([v]) => v === value) ? value : options[0][0];
@@ -87,7 +134,7 @@ function fillStart(city, value) {
 function applyScenario(key, keep = {}) {
   scenario = key;
   const s = SCENARIOS[key];
-  const city = s.config.city ?? form.elements.city.value ?? 'manta';
+  const city = s.config.city;
   const base = makeConfig({ city });
   setForm({ ...base, ...s.config, city, ...keep });
   form.querySelector(`input[name="scenario"][value="${key}"]`).checked = true;
@@ -114,16 +161,10 @@ function readForm() {
 function updateOutputs() {
   $('r0Out').textContent = Number(form.elements.r0.value).toFixed(1).replace('.', ',');
   $('dosesOut').textContent = fmt(form.elements.dosesPerDay.value);
-  $('effOut').textContent = `${Math.round(form.elements.vaccineEfficacy.value * 100)} %`;
+  $('effOut').textContent = pct(form.elements.vaccineEfficacy.value);
   $('budgetOut').textContent = usd(form.elements.budget.value);
 }
 
-// Al cambiar de ciudad: sus valores por defecto de población, recursos y lugar de inicio.
-form.elements.city.addEventListener('change', () => {
-  const keep = readForm();
-  const base = makeConfig({ city: keep.city });
-  setForm({ ...keep, ...base, ...SCENARIOS[scenario].config, city: keep.city, seed: keep.seed, runs: keep.runs });
-});
 $('scenarios').addEventListener('change', (e) => {
   const current = readForm();
   applyScenario(e.target.value, { seed: current.seed, runs: current.runs });
@@ -131,10 +172,11 @@ $('scenarios').addEventListener('change', (e) => {
 
 function renderLegend() {
   const T = terms();
-  const items = [['#5fd38d', T.S], ['#facc15', `${T.E} (el comité no lo ve)`], ['#ff3b3b', T.I], ['#60a5fa', T.R], ['#2dd4bf', 'Vacunado'], ['#c084fc', 'Hogar en cuarentena']];
-  $('legend').innerHTML = items.map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('') + '<span>El rombo sobre cada vecino es su estado ese día</span>';
-  $('curveTitle').firstChild.textContent = `${T.active} por día `;
-  $('thInfected').textContent = `Personas ${T.bittenM}`;
+  const E = scenario === 'zombi' ? 'Mordido, todavía no se nota' : T.E;
+  const items = [['#5fd38d', T.S], ['#facc15', E], ['#ff3b3b', T.I], ['#60a5fa', T.R], ['#2dd4bf', 'Vacunado'], ['#c084fc', 'Casa en cuarentena']];
+  $('legend').innerHTML = items.map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('') + '<span>El color del rombo sobre cada vecino es su estado</span>';
+  $('curveTitle').textContent = `${T.active} cada día`;
+  $('thInfected').textContent = T.bittenM[0].toUpperCase() + T.bittenM.slice(1);
 }
 
 const PRESETS = {
@@ -168,13 +210,14 @@ vecino.addEventListener('click', (e) => {
   if (e.target.closest('.close')) {
     vecino.hidden = true;
     player.selected = -1;
-    player.show(player.day);
+    player.show(player.day, true);
   }
   const link = e.target.closest('[data-person]');
   if (link) player.select(Number(link.dataset.person));
 });
 $('meetBtn').addEventListener('click', () => {
   if (!neighbours.length) return;
+  if (view !== 'barrio') setView('barrio');
   player.select(neighbours[nextNeighbour++ % neighbours.length]);
 });
 
@@ -183,8 +226,9 @@ function setBusy(on, text) {
   busy = on;
   $('runBtn').disabled = on;
   for (const b of document.querySelectorAll('[data-preset]')) b.disabled = on;
-  $('progress').hidden = !on;
-  if (text) $('status').textContent = text;
+  $('busy').hidden = !on;
+  if (on) $('progress').style.width = '0';
+  if (text) $('busyText').textContent = text;
 }
 
 function runLocal(config) {
@@ -192,8 +236,8 @@ function runLocal(config) {
     const worker = new Worker('./worker.js', { type: 'module' });
     worker.onmessage = ({ data }) => {
       if (data.type === 'progress') {
-        $('progress').value = data.value;
-        $('status').textContent = data.text;
+        $('progress').style.width = `${data.value}%`;
+        $('busyText').textContent = data.text;
       } else if (data.type === 'done') {
         worker.terminate();
         resolve(data.summary);
@@ -208,7 +252,8 @@ function runLocal(config) {
 }
 
 async function runCloud(config) {
-  $('status').textContent = `Calculando ${config.runs} simulaciones en AWS Lambda…`;
+  $('busyText').textContent = `Calculando ${config.runs} simulaciones en AWS Lambda…`;
+  $('progress').style.width = '50%';
   const res = await fetch(`${API_URL.replace(/\/$/, '')}/simulate`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -221,60 +266,90 @@ async function runCloud(config) {
 
 // La animación: el worker repite la corrida típica guardando el estado de cada persona cada día.
 function loadCity(s) {
-  const worker = new Worker('./worker.js', { type: 'module' });
-  worker.onmessage = ({ data }) => {
-    worker.terminate();
-    if (data.type !== 'trace') return;
-    barrio.load(data.trace, makeConfig(s.config), SCENARIOS[scenario].theme, terms());
-    tree.load(data.trace, SCENARIOS[scenario].theme);
-    player.load(data.trace, s.config, s.runs, terms());
-    vecino.hidden = true;
-    neighbours = interestingPeople(data.trace);
-    nextNeighbour = 0;
-    $('meetBtn').disabled = neighbours.length === 0;
-  };
-  worker.postMessage({ type: 'trace', config: s.config, policy: s.policy, run: s.representativeRun });
+  return new Promise((resolve) => {
+    const worker = new Worker('./worker.js', { type: 'module' });
+    worker.onmessage = ({ data }) => {
+      worker.terminate();
+      if (data.type === 'trace') {
+        barrio.load(data.trace, makeConfig(s.config), SCENARIOS[scenario].theme, terms());
+        tree.load(data.trace, SCENARIOS[scenario].theme);
+        player.load(data.trace, s.config, s.runs, terms());
+        vecino.hidden = true;
+        neighbours = interestingPeople(data.trace);
+        nextNeighbour = 0;
+        $('meetBtn').disabled = neighbours.length === 0;
+      }
+      resolve();
+    };
+    worker.postMessage({ type: 'trace', config: s.config, policy: s.policy, run: s.representativeRun });
+  });
 }
 
 const policyText = (p) =>
-  `${PRIORITY[p.priority].toLowerCase()}, ${p.quarantine ? 'con' : 'sin'} cuarentenas, ${p.closures ? 'con' : 'sin'} cierres, reserva ${Math.round((p.reserve ?? 0) * 100)} %`;
+  `vacunar primero ${toWho(p.priority)}, ${p.quarantine ? 'con' : 'sin'} cuarentenas y ${p.closures ? 'con' : 'sin'} cierres`;
 
 function showChanges(before, after, label) {
   const box = $('changes');
   const T = terms();
-  const row = (title, a, b) => `<div><span>${title}</span><strong>${a} → ${b}</strong></div>`;
+  const row = (title, a, b) => `<div><span>${title}</span><strong><s>${a}</s>${b}</strong></div>`;
   const changes = [];
   const p0 = before.policy, p1 = after.policy;
-  if (p0.priority !== p1.priority) changes.push(`Vacunas: de "${PRIORITY[p0.priority]}" a "${PRIORITY[p1.priority]}".`);
-  if (p0.quarantine !== p1.quarantine) changes.push(p1.quarantine ? 'Ahora sí conviene aislar los hogares de los casos.' : 'Ya no conviene gastar en cuarentenas.');
+  if (p0.priority !== p1.priority) changes.push(`Las vacunas ahora van primero ${toWho(p1.priority)}. Antes iban ${toWho(p0.priority)}.`);
+  if (p0.quarantine !== p1.quarantine) changes.push(p1.quarantine ? 'Ahora sí conviene aislar las casas de los casos.' : 'Ya no conviene gastar en cuarentenas.');
   if (p0.closures !== p1.closures) changes.push(p1.closures ? 'Ahora sí conviene cerrar mercados o colegios donde haya casos.' : 'Ya no conviene cerrar mercados ni colegios: el dinero rinde más en otra cosa.');
-  if ((p0.reserve ?? 0) !== (p1.reserve ?? 0)) changes.push(`Reserva de presupuesto: de ${Math.round((p0.reserve ?? 0) * 100)} % a ${Math.round((p1.reserve ?? 0) * 100)} %.`);
-  if (!!p0.fumigation !== !!p1.fumigation) changes.push(p1.fumigation ? 'Ahora conviene enviar brigadas de fumigación a las zonas con casos.' : 'Ya no conviene fumigar.');
-  if (!changes.length) changes.push(`El mismo plan sigue siendo el mejor (${policyText(p1)}).`);
+  if ((p0.reserve ?? 0) !== (p1.reserve ?? 0)) changes.push(`Ahora se guarda el ${pct(p1.reserve ?? 0)} del presupuesto (antes, el ${pct(p0.reserve ?? 0)}).`);
+  if (!!p0.fumigation !== !!p1.fumigation) changes.push(p1.fumigation ? 'Ahora conviene mandar brigadas de fumigación a las zonas con casos.' : 'Ya no conviene fumigar.');
+  if (!changes.length) changes.push(`El mismo plan sigue siendo el mejor: ${policyText(p1)}.`);
   box.innerHTML =
-    `<h3>Brote sorpresa: ${label}. El plan se volvió a calcular.</h3>` +
+    `<button type="button" class="close" aria-label="Cerrar"><svg class="ic"><use href="#i-close"/></svg></button>` +
+    `<h3>Brote sorpresa: ${label}. El Comité recalculó el plan.</h3>` +
     `<div class="delta">` +
-    row(`Personas ${T.bittenM} con el plan`, fmt(before.strategies.adaptativa.infected.mean), fmt(after.strategies.adaptativa.infected.mean)) +
-    row('Protegidas frente a no hacer nada', fmt(before.savedVsNone.mean), fmt(after.savedVsNone.mean)) +
-    row('Gana al azar', `${Math.round(before.winRateVsRandom * 100)} %`, `${Math.round(after.winRateVsRandom * 100)} %`) +
+    row(`${T.bittenM[0].toUpperCase()}${T.bittenM.slice(1)} con el plan`, fmt(before.strategies.adaptativa.infected.mean), fmt(after.strategies.adaptativa.infected.mean)) +
+    row('A salvo frente a no hacer nada', fmt(before.savedVsNone.mean), fmt(after.savedVsNone.mean)) +
+    row('Le gana al azar', pct(before.winRateVsRandom), pct(after.winRateVsRandom)) +
     row('Costo', usd(before.strategies.adaptativa.spent.mean), usd(after.strategies.adaptativa.spent.mean)) +
     `</div><ul>${changes.map((c) => `<li>${c}</li>`).join('')}</ul>`;
   box.hidden = false;
 }
+$('changes').addEventListener('click', (e) => {
+  if (e.target.closest('.close')) $('changes').hidden = true;
+});
 
 async function simulate(surprise = null) {
   if (busy) return;
   const config = readForm();
   const useCloud = API_URL && $('useCloud').checked;
-  setBusy(true, 'Preparando…');
+  setBusy(true, surprise ? `Brote sorpresa: ${surprise}…` : 'Preparando la ciudad…');
   const started = performance.now();
   try {
     const summary = useCloud ? await runCloud(config) : await runLocal(config);
-    render(summary, (performance.now() - started) / 1000);
+    const seconds = (performance.now() - started) / 1000;
+    $('busyText').textContent = 'Preparando el barrio…';
+    $('progress').style.width = '100%';
+    const first = !previous;
+    if (first) {
+      // Primera vez: se pasa a la pantalla del plan con la cortina.
+      await new Promise((resolve) => wipe(() => {
+        setBusy(false);
+        $('resultsScreen').hidden = false;
+        $('setupScreen').hidden = true;
+        screen = 'results';
+        document.body.classList.add('on-results');
+        document.querySelector('[data-screen="results"]').disabled = false;
+        document.querySelectorAll('[data-screen]').forEach((b) => b.classList.toggle('on', b.dataset.screen === 'results'));
+        scrollTo(0, 0);
+        render(summary, seconds);
+        resolve();
+      }));
+    } else {
+      if (screen !== 'results') showScreen('results');
+      render(summary, seconds);
+    }
     if (surprise && previous) showChanges(previous, summary, surprise);
     else $('changes').hidden = true;
     previous = summary;
-    loadCity(summary);
+    await loadCity(summary);
+    barrio.setActive(screen === 'results' && view === 'barrio');
   } catch (err) {
     $('status').textContent = `No se pudo simular: ${err.message}`;
   } finally {
@@ -282,37 +357,73 @@ async function simulate(surprise = null) {
   }
 }
 
+// Los números grandes suben de 0 a su valor.
+function countUp(el, value, format = fmt) {
+  if (reduced) return (el.textContent = format(value));
+  const t0 = performance.now();
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / 1100);
+    el.textContent = format(value * (1 - (1 - k) ** 3));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// El plan en pocas líneas, cada una con su ícono.
+function planItems(s) {
+  const c = s.config;
+  const p = s.policy;
+  const items = [];
+  if (p.quarantine) items.push(['i-house-q', `<b>Aislar la casa</b> de cada caso reportado desde el día ${c.responseStartDay}`]);
+  if (c.dosesPerDay > 0) items.push(['i-syringe', `<b>${fmt(c.dosesPerDay)} vacunas al día</b> para ${PRIORITY_SHORT[p.priority]}`]);
+  if (p.closures) {
+    const often = s.closures.filter((x) => x.share >= 0.25).slice(0, 2);
+    const where = often.map((x) => (x.layer === 'mercado' ? `el mercado de ${x.parroquia}` : `los colegios de ${x.parroquia}`));
+    items.push(['i-lock', where.length ? `<b>Cerrar ${where.join(' y ')}</b> solo cuando suban los casos` : '<b>Cerrar mercados o colegios</b> solo si suben los casos']);
+  } else items.push(['i-market', '<b>No cerrar</b> mercados ni colegios: rinde más otra cosa']);
+  if (c.vectorBorne && p.fumigation) items.push(['i-spray', '<b>Fumigar</b> las zonas donde aparecen casos']);
+  if (p.reserve > 0) items.push(['i-coins', `<b>Guardar el ${pct(p.reserve)}</b> del dinero para todo el brote`]);
+  return items.map(([ic, t]) => `<li><svg class="ic"><use href="#${ic}"/></svg><span>${t}</span></li>`).join('');
+}
+
+// El informe para la alcaldía, con títulos y pasos numerados.
+function reportHtml(text) {
+  const out = [];
+  let list = false;
+  for (const line of text.split('\n').slice(1)) {
+    const numbered = /^\d+\.\s/.test(line);
+    if (list && !numbered) { out.push('</ol>'); list = false; }
+    if (!line) continue;
+    if (line === line.toUpperCase()) out.push(`<h5>${line[0]}${line.slice(1).toLowerCase()}</h5>`);
+    else if (numbered) { if (!list) { out.push('<ol>'); list = true; } out.push(`<li>${line.replace(/^\d+\.\s*/, '')}</li>`); }
+    else out.push(`<p>${line}</p>`);
+  }
+  if (list) out.push('</ol>');
+  return out.join('');
+}
+
 function render(s, seconds) {
   const T = terms();
-  // Primer resultado: aparecen el plan, el barrio y los detalles.
-  const first = !$('empty').hidden;
-  for (const id of ['summary', 'surprise', 'cityCard', 'treeCard', 'curveCard', 'detailsGrid']) $(id).hidden = false;
-  $('empty').hidden = true;
-  if (first) $('summary').scrollIntoView({ behavior: 'smooth', block: 'start' });
   const sc = SCENARIOS[scenario];
   const city = CITIES[s.config.city];
   const where = s.engine === 'aws' ? 'en AWS Lambda' : 'en este navegador';
-  $('status').textContent = `Listo: ${s.runs} simulaciones ${where} en ${seconds.toFixed(1)} s.`;
+  $('status').textContent = `Listo: ${s.runs} simulaciones ${where} en ${seconds.toFixed(1).replace('.', ',')} s.`;
 
-  // Plan recomendado: los pasos del informe, en lenguaje simple.
-  const report = mayorReport(s, { theme: sc.theme, disease: sc.disease });
-  const lines = report.split('\n');
-  const from = lines.indexOf('QUÉ HACER') + 1;
-  const to = lines.indexOf('', from);
-  $('planTitle').textContent = `El plan · ${city.name}`;
-  $('headline').textContent = headline(s);
-  $('planSteps').innerHTML = lines.slice(from, to).map((l) => `<li>${l.replace(/^\d+\.\s*/, '')}</li>`).join('');
-  $('planCard').hidden = false;
+  $('planTitle').textContent = `El plan para ${city.name}`;
+  countUp($('kSavedNone'), s.savedVsNone.mean);
+  $('savedLabel').textContent = `personas que no terminan ${T.bittenM} gracias al plan`;
+  const fizzled = s.runs - s.takeoffRuns;
+  $('headline').textContent = `Promedio de ${fmt(s.runs)} simulaciones, comparado con no hacer nada.${fizzled > 0 ? ` En ${fizzled} de ellas el brote se apagó solo.` : ''}`;
+  $('planSteps').innerHTML = planItems(s);
   renderVerdict(s);
 
-  $('kSavedNone').textContent = fmt(s.savedVsNone.mean);
-  $('kSavedNoneRange').textContent = `rango ${fmt(s.savedVsNone.p5)} a ${fmt(s.savedVsNone.p95)}`;
-  $('kSavedRandom').textContent = fmt(s.savedVsRandom.mean);
-  $('kSavedRandomRange').textContent = `rango ${fmt(s.savedVsRandom.p5)} a ${fmt(s.savedVsRandom.p95)}`;
-  $('kWin').textContent = s.takeoffRuns ? `${Math.round(s.winRateVsRandom * 100)} %` : '—';
-  $('kWinNote').textContent = `${s.takeoffRuns} de ${s.runs} brotes crecieron; pierde en ${Math.round(s.lossRateVsRandom * 100)} %`;
-  $('kCost').textContent = usd(s.strategies.adaptativa.spent.mean);
-  $('kCostNote').textContent = `de un presupuesto de ${usd(s.config.budget)}`;
+  countUp($('kSavedRandom'), s.savedVsRandom.mean);
+  $('kWin').textContent = s.takeoffRuns ? pct(s.winRateVsRandom) : 'Sin datos';
+  $('kWinNote').textContent = s.takeoffRuns ? `de los brotes le gana al azar (${s.takeoffRuns} de ${s.runs} crecieron)` : 'ningún brote llegó a crecer';
+  countUp($('kCost'), s.strategies.adaptativa.spent.mean, usd);
+  $('kCostNote').textContent = `gastados de ${usd(s.config.budget)}`;
+  $('kRuns').textContent = fmt(s.runs);
+  $('kRunsNote').textContent = `simulaciones ${where}, en ${seconds.toFixed(1).replace('.', ',')} s`;
 
   const tbody = $('compare').querySelector('tbody');
   tbody.innerHTML = '';
@@ -320,7 +431,7 @@ function render(s, seconds) {
     const x = s.strategies[key];
     const tr = document.createElement('tr');
     if (key === 'adaptativa') tr.className = 'best';
-    for (const text of [LABELS[key], fmt(x.infected.mean), `${fmt(x.infected.p5)} – ${fmt(x.infected.p95)}`, fmt(x.peak.mean), usd(x.spent.mean)]) {
+    for (const text of [LABELS[key], fmt(x.infected.mean), `${fmt(x.infected.p5)} a ${fmt(x.infected.p95)}`, fmt(x.peak.mean), usd(x.spent.mean)]) {
       const td = document.createElement('td');
       td.textContent = text;
       tr.appendChild(td);
@@ -329,18 +440,19 @@ function render(s, seconds) {
   }
   const a = s.strategies.adaptativa;
   $('wasted').textContent =
-    `Vacunas a casos ya reportados: ${a.wastedVisible} (siempre 0). Dosis que cayeron en personas ${T.bittenM} sin síntomas o casos sin reportar: ${fmt(a.wastedHidden.mean)} en promedio; nadie puede distinguirlas de una persona sana.`;
+    `Vacunas puestas a casos ya reportados: ${a.wastedVisible}. Unas ${fmt(a.wastedHidden.mean)} dosis caen en personas ${T.bitten} que aún no tienen síntomas: nadie puede distinguirlas de una persona sana.`;
 
-  $('report').textContent = report;
+  $('report').innerHTML = reportHtml(mayorReport(s, { theme: sc.theme, disease: sc.disease }));
 
   $('nPolicies').textContent = s.ranking.length;
   const rtbody = $('ranking').querySelector('tbody');
   rtbody.innerHTML = '';
-  s.ranking.forEach((r, i) => {
+  $('ranking').classList.toggle('no-fum', !s.config.vectorBorne);
+  s.ranking.slice(0, 3).forEach((r, i) => {
     const tr = document.createElement('tr');
     if (i === 0) tr.className = 'best';
-    const fumigation = s.config.vectorBorne ? (r.policy.fumigation ? 'Sí' : 'No') : '—';
-    for (const text of [i + 1, PRIORITY[r.policy.priority], r.policy.closures ? 'Sí' : 'No', r.policy.quarantine ? 'Sí' : 'No', fumigation, `${Math.round((r.policy.reserve ?? 0) * 100)} %`, fmt(r.infected), usd(r.spent)]) {
+    const fumigation = r.policy.fumigation ? 'Sí' : 'No';
+    for (const text of [i + 1, PRIORITY[r.policy.priority], r.policy.closures ? 'Sí' : 'No', r.policy.quarantine ? 'Sí' : 'No', fumigation, fmt(r.infected), usd(r.spent)]) {
       const td = document.createElement('td');
       td.textContent = text;
       tr.appendChild(td);
@@ -349,28 +461,27 @@ function render(s, seconds) {
   });
 
   $('footer').textContent =
-    `${city.name}: ${fmt(s.config.realPopulation)} habitantes urbanos · semilla ${s.config.seed} · huella ${s.configHash} · ` +
-    `cada persona simulada representa a ${fmt(s.scale)} habitantes · misma semilla y datos = mismo resultado.`;
+    `${city.name} tiene ${fmt(s.config.realPopulation)} habitantes urbanos y cada persona simulada representa a ${fmt(s.scale)}. ` +
+    `Semilla ${s.config.seed}, huella ${s.configHash}: con la misma semilla y los mismos datos sale el mismo resultado.`;
 
   drawChart(s);
 }
 
-// Veredicto de la prueba de fuego con prueba de signos: ¿ganar fue suerte?
+// ¿Ganar fue suerte? Prueba de signos sobre los brotes que crecieron.
 function renderVerdict(s) {
   const box = $('verdict');
   if (!s.verdictVsRandom) {
     box.hidden = true;
     return;
   }
-  const pText = (p) => (p < 0.001 ? 'p < 0,001' : `p = ${p.toFixed(3).replace('.', ',')}`);
+  const luck = (p) => (p < 0.001 ? 'no es suerte: menos de 1 en 1.000' : `probabilidad de que sea suerte: ${(p * 100).toFixed(1).replace('.', ',')} %`);
   const line = (v, name) =>
-    `<div class="${v.passed ? 'ok' : 'ko'}"><b>${v.passed ? 'Supera' : 'No se puede afirmar que supere'}</b> a ${name}: ` +
-    `gana ${v.wins}, pierde ${v.losses} y empata ${v.ties} de ${s.takeoffRuns} brotes que crecieron (prueba de signos, ${pText(v.p)}).</div>`;
-  box.innerHTML = line(s.verdictVsNone, 'no hacer nada') + line(s.verdictVsRandom, 'repartir los mismos recursos al azar');
+    `<div class="${v.passed ? 'ok' : 'ko'}"><b>${v.passed ? 'Le gana' : 'No le gana con claridad'}</b> a ${name} en ${v.wins} de ${s.takeoffRuns} brotes (${luck(v.p)}).</div>`;
+  box.innerHTML = line(s.verdictVsNone, 'no hacer nada') + line(s.verdictVsRandom, 'repartir lo mismo al azar');
   box.hidden = false;
 }
 
-const AXIS = { ticks: { color: '#98a2ae' }, grid: { color: '#222831' } };
+const AXIS = { ticks: { color: '#b5a5c2' }, grid: { color: '#2a1d35' } };
 function drawChart(s) {
   if (!window.Chart) return;
   const labels = s.strategies.nada.curve.mean.map((_, d) => d);
@@ -378,9 +489,9 @@ function drawChart(s) {
   for (const key of ['nada', 'azar', 'adaptativa']) {
     const c = s.strategies[key].curve;
     datasets.push(
-      { label: `${LABELS[key]} (p95)`, data: c.p95, borderWidth: 0, pointRadius: 0, fill: false, borderColor: 'transparent' },
-      { label: `${LABELS[key]} (p5)`, data: c.p5, borderWidth: 0, pointRadius: 0, fill: '-1', backgroundColor: `${COLORS[key]}1f`, borderColor: 'transparent' },
-      { label: LABELS[key], data: c.mean, borderColor: COLORS[key], borderWidth: 2.2, pointRadius: 0, fill: false },
+      { label: `${key}:alto`, data: c.p95, borderWidth: 0, pointRadius: 0, fill: false, borderColor: 'transparent' },
+      { label: `${key}:bajo`, data: c.p5, borderWidth: 0, pointRadius: 0, fill: '-1', backgroundColor: `${COLORS[key]}26`, borderColor: 'transparent' },
+      { label: LABELS[key], data: c.mean, borderColor: COLORS[key], borderWidth: key === 'adaptativa' ? 3 : 2.2, pointRadius: 0, fill: false, tension: 0.25 },
     );
   }
   if (chart) chart.destroy();
@@ -390,15 +501,15 @@ function drawChart(s) {
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: false,
+      animation: reduced ? false : { duration: 1200, easing: 'easeOutQuart' },
       interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { ...AXIS, title: { display: true, text: 'Día', color: '#98a2ae' }, ticks: { ...AXIS.ticks, maxTicksLimit: 12 } },
-        y: { ...AXIS, title: { display: true, text: `${terms().active} (personas)`, color: '#98a2ae' } },
+        x: { ...AXIS, title: { display: true, text: 'Día', color: '#b5a5c2' }, ticks: { ...AXIS.ticks, maxTicksLimit: 12 } },
+        y: { ...AXIS, title: { display: true, text: 'Personas', color: '#b5a5c2' }, ticks: { ...AXIS.ticks, callback: (v) => fmt(v) } },
       },
       plugins: {
-        legend: { labels: { color: '#e7eaee', boxWidth: 14, filter: (item) => !item.text.includes('(p') } },
-        tooltip: { filter: (item) => !item.dataset.label.includes('(p'), callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
+        legend: { labels: { color: '#f4ecdc', boxWidth: 14, filter: (item) => !item.text.includes(':') } },
+        tooltip: { filter: (item) => !item.dataset.label.includes(':'), callbacks: { label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}` } },
       },
     },
   });
@@ -410,10 +521,10 @@ function drawCalibration() {
   const c = CALIBRATION;
   new window.Chart($('calib'), {
     data: {
-      labels: c.observed.map((_, w) => `SE ${w + 1}`),
+      labels: c.observed.map((_, w) => `Semana ${w + 1}`),
       datasets: [
-        { type: 'bar', label: 'Casos reales (MSP)', data: c.observed, backgroundColor: '#f2b33d99', borderWidth: 0 },
-        { type: 'line', label: 'Modelo calibrado', data: c.model, borderColor: '#3b9eff', borderWidth: 2.2, pointRadius: 0 },
+        { type: 'bar', label: 'Casos reales (MSP)', data: c.observed, backgroundColor: '#ff751899', borderWidth: 0 },
+        { type: 'line', label: 'Lo que da el motor', data: c.model, borderColor: '#8be04e', borderWidth: 2.4, pointRadius: 0, tension: 0.3 },
       ],
     },
     options: {
@@ -422,17 +533,62 @@ function drawCalibration() {
       animation: false,
       interaction: { mode: 'index', intersect: false },
       scales: {
-        x: { ...AXIS, ticks: { ...AXIS.ticks, maxTicksLimit: 13 } },
-        y: { ...AXIS, title: { display: true, text: 'Casos reportados por semana', color: '#98a2ae' } },
+        x: { ...AXIS, ticks: { ...AXIS.ticks, maxTicksLimit: 8 } },
+        y: { ...AXIS, title: { display: true, text: 'Casos por semana', color: '#b5a5c2' } },
       },
-      plugins: { legend: { labels: { color: '#e7eaee' } } },
+      plugins: { legend: { labels: { color: '#f4ecdc', boxWidth: 14 } } },
     },
   });
   $('calibNote').innerHTML =
-    `El mismo motor, sin intervenciones, ajustado a los ${fmt(c.observed.reduce((a, b) => a + b, 0))} casos de 2024 del ` +
-    `<a href="${DENGUE_MANABI_2024.url}" target="_blank" rel="noopener">Ministerio de Salud Pública</a>: ` +
-    `cada caso contagia a <b>${String(c.r0).replace('.', ',')}</b> personas, se reporta el <b>${(c.reportedFraction * 100).toFixed(1).replace('.', ',')} %</b> de las infecciones y ` +
-    `R² = <b>${String(c.r2).replace('.', ',')}</b>. Las plantillas "Dengue" y "El Niño 2026" usan este contagio. Detalle y límites en docs/calibracion.md.`;
+    `Dengue en Manabí, 2024: ${fmt(c.observed.reduce((x, y) => x + y, 0))} casos del ` +
+    `<a href="${DENGUE_MANABI_2024.url}" target="_blank" rel="noopener">Ministerio de Salud Pública</a>. ` +
+    `El motor, sin intervenir, sigue la curva real (R² de ${String(c.r2).replace('.', ',')}) con cada caso contagiando a ${String(c.r0).replace('.', ',')} personas.`;
+}
+
+// ---------- La película de la portada, de fondo ----------
+// Cada tercer cuadro, lento y con fundido. Se carga después de todo lo demás.
+function filmBackdrop() {
+  const canvas = $('bgFilm');
+  if (reduced || innerWidth < 700) return;
+  const ctx = canvas.getContext('2d');
+  const frames = [];
+  for (let k = 0; k < 432; k += 3) frames.push(`film/${String(k).padStart(3, '0')}.webp`);
+  const imgs = [];
+  let next = 0;
+  const loadMore = () => {
+    if (next >= frames.length) return;
+    const img = new Image();
+    img.onload = img.onerror = () => { img.ready = img.naturalWidth > 0; loadMore(); };
+    img.src = frames[next++];
+    imgs.push(img);
+  };
+  loadMore();
+  loadMore();
+  const draw = (img, alpha) => {
+    const w = canvas.width;
+    const h = canvas.height;
+    const k = Math.max(w / img.naturalWidth, h / img.naturalHeight);
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(img, (w - img.naturalWidth * k) / 2, (h - img.naturalHeight * k) / 2, img.naturalWidth * k, img.naturalHeight * k);
+  };
+  const t0 = performance.now();
+  const loop = (now) => {
+    if (screen === 'setup' && !document.hidden) {
+      const w = Math.min(960, innerWidth);
+      const h = Math.round((w * innerHeight) / innerWidth);
+      if (canvas.width !== w || canvas.height !== h) [canvas.width, canvas.height] = [w, h];
+      const ready = imgs.filter((x) => x.ready);
+      if (ready.length) {
+        const f = ((now - t0) / 1000) * 6; // 6 cuadros por segundo: cámara lenta
+        const a = Math.floor(f) % ready.length;
+        draw(ready[a], 1);
+        draw(ready[(a + 1) % ready.length], f % 1);
+        ctx.globalAlpha = 1;
+      }
+    }
+    requestAnimationFrame(loop);
+  };
+  requestAnimationFrame(loop);
 }
 
 form.addEventListener('input', updateOutputs);
@@ -450,7 +606,7 @@ $('resetBtn').addEventListener('click', () => {
   const current = readForm();
   applyScenario(scenario, { seed: current.seed, runs: current.runs });
 });
-$('copyBtn').addEventListener('click', () => navigator.clipboard?.writeText($('report').textContent));
+$('copyBtn').addEventListener('click', () => navigator.clipboard?.writeText($('report').innerText));
 for (const button of document.querySelectorAll('[data-preset]')) {
   button.addEventListener('click', () => {
     const current = readForm();
@@ -461,5 +617,8 @@ for (const button of document.querySelectorAll('[data-preset]')) {
 
 if (API_URL) $('cloudRow').hidden = false;
 applyScenario('zombi', { runs: 100 });
-if (window.Chart) drawCalibration();
-else window.addEventListener('load', drawCalibration);
+const whenLoaded = (fn) => (document.readyState === 'complete' ? fn() : window.addEventListener('load', fn));
+whenLoaded(() => {
+  drawCalibration();
+  filmBackdrop();
+});

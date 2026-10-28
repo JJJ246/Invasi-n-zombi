@@ -139,11 +139,11 @@ export function renderVecino(el, trace, i, day, theme = 'zombi') {
   const p = trace.people;
   const who = persona(trace, i);
   const code = trace.adaptativa.frames[day * trace.N + i] & 7;
-  const routine = [`Casa en ${zone(p, i)} · ${p.homeSize[i] === 1 ? a(who, 'vive sola', 'vive solo') : `vive con ${p.homeSize[i] - 1} ${p.homeSize[i] === 2 ? 'persona' : 'personas'}`}`];
-  if (p.bus[i] >= 0) routine.push(`bus línea ${p.bus[i] + 1}`);
-  if (p.colegio[i] >= 0) routine.push(`colegio en ${zone(p, i)}`);
-  if (p.trabajo[i] >= 0) routine.push(`trabajo en ${zone(p, i)}`);
-  routine.push(`mercado de ${zone(p, i)}`);
+  const routine = [`Vive en ${zone(p, i)}, ${p.homeSize[i] === 1 ? a(who, 'sola', 'solo') : `con ${p.homeSize[i] - 1} ${p.homeSize[i] === 2 ? 'persona' : 'personas'}`}`];
+  if (p.bus[i] >= 0) routine.push(`toma el bus de la línea ${p.bus[i] + 1}`);
+  if (p.colegio[i] >= 0) routine.push(`va al colegio en ${zone(p, i)}`);
+  if (p.trabajo[i] >= 0) routine.push(`trabaja en ${zone(p, i)}`);
+  routine.push(`compra en el mercado de ${zone(p, i)}`);
   const maxC = 40;
   const contacts = p.connectivity[i];
 
@@ -160,23 +160,23 @@ export function renderVecino(el, trace, i, day, theme = 'zombi') {
       const pk = persona(trace, k);
       const d = s.infectedDay[k];
       const where = d === 0 ? 'paciente cero' : `día ${d}, ${PLACE[s.infectedLayer[k]](p, k)}`;
-      return `<li><button type="button" class="link" data-person="${k}"><span class="mini" style="--c:${pk.color}">${pk.initials}</span>${esc(pk.name)}</button> <small>${esc(where)}</small>${idx === 0 ? ' <b>← aquí</b>' : ''}</li>`;
+      return `<li><button type="button" class="link" data-person="${k}"><span class="mini" style="--c:${pk.color}">${pk.initials}</span>${esc(pk.name)}</button> <small>${esc(where)}</small>${idx === 0 ? ` <b>(${a(who, 'ella', 'él')})</b>` : ''}</li>`;
     }).join('');
-    const tail = ch.complete ? '' : '<li><small>… (la cadena sigue)</small></li>';
+    const tail = ch.complete ? '' : '<li><small>y la cadena sigue más atrás</small></li>';
     chainHtml = `<h4>Cadena de contagio si nadie hace nada <small>(de ${a(who, 'ella', 'él')} hacia el paciente cero)</small></h4><ol class="chain">${rows}${tail}</ol>`;
   }
   const why = whyVaccinated(trace, i, who);
   el.innerHTML = `
-    <button type="button" class="close" aria-label="Cerrar">✕</button>
+    <button type="button" class="close" aria-label="Cerrar"><svg class="ic"><use href="#i-close"/></svg></button>
     <div class="vecino-head">
       <div class="avatar" style="--c:${who.color}"><span class="plumbob" style="--p:${STATE_COLOR[code] ?? '#4ade80'}" title="Hoy, con el plan: ${STATE_TEXT[theme][code][who.female ? 0 : 1]}"></span>${who.initials}</div>
       <div>
         <h3>${esc(who.name)} <small>${who.age} años</small></h3>
-        <p class="muted">${esc(who.what)} · día ${day}, con el plan: <b style="color:${STATE_COLOR[code]}">${STATE_TEXT[theme][code][who.female ? 0 : 1]}</b></p>
+        <p class="muted">${esc(who.what)}. Día ${day}, con el plan: <b style="color:${STATE_COLOR[code]}">${STATE_TEXT[theme][code][who.female ? 0 : 1]}</b></p>
         <div class="need"><span>Contactos al día</span><i><b style="width:${Math.min(100, (contacts / maxC) * 100)}%"></b></i><em>${Math.round(contacts)}</em></div>
       </div>
     </div>
-    <p class="routine">${routine.map(esc).join(' <span>→</span> ')}</p>
+    <p class="routine">${esc(routine.slice(0, -1).join(', '))} y ${esc(routine[routine.length - 1])}.</p>
     <h4>Qué le pasa en cada caso <small>(el mismo brote)</small></h4>
     <ul class="fates">${fates}</ul>
     ${why ? `<h4>Por qué ${a(who, 'la', 'lo')} vacunó el Comité</h4><p>${esc(why)}</p>` : ''}

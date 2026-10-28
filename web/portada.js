@@ -331,7 +331,7 @@ $('bars').innerHTML = SCENARIOS.map(([name, pct]) => `<div class="bar${pct < 80 
   const bars = obs.map((v, i) => `<rect x="${pad + i * bw + 1}" y="${y(v)}" width="${bw - 2}" height="${H - pad - y(v)}" fill="#ff8a1f" opacity="0.75"/>`).join('');
   const line = mod.map((v, i) => `${i ? 'L' : 'M'}${pad + i * bw + bw / 2},${y(v)}`).join('');
   svg.innerHTML = `${bars}<path d="${line}" fill="none" stroke="#4ade80" stroke-width="3"/>
-    <text x="${pad}" y="18" fill="#a39cc4" font-size="12">Dengue en Manabí 2024 · casos por semana</text>
+    <text x="${pad}" y="18" fill="#a39cc4" font-size="12">Dengue en Manabí 2024: casos por semana</text>
     <rect x="${W - 200}" y="8" width="10" height="10" fill="#ff8a1f"/><text x="${W - 185}" y="17" fill="#ece8ff" font-size="12">Reales (MSP)</text>
     <rect x="${W - 100}" y="12" width="14" height="3" fill="#4ade80"/><text x="${W - 82}" y="17" fill="#ece8ff" font-size="12">Modelo</text>`;
 })();

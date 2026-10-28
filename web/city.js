@@ -44,11 +44,6 @@ export class CityPlayer {
     for (const p of this.panels) p.canvas.addEventListener('click', (e) => this.pickAt(p, e));
 
     this.playBtn.addEventListener('click', () => (this.playing ? this.pause() : this.play()));
-    // Pantalla completa: para proyectar la ciudad en el pitch.
-    root.querySelector('#fullBtn').addEventListener('click', () => {
-      if (document.fullscreenElement) document.exitFullscreen();
-      else root.requestFullscreen?.();
-    });
     this.slider.addEventListener('input', () => {
       this.pause();
       this.show(Number(this.slider.value));
@@ -75,7 +70,7 @@ export class CityPlayer {
     this.slider.max = String(trace.days);
     this.slider.disabled = false;
     this.playBtn.disabled = false;
-    this.note.textContent = `el mismo brote con tres decisiones distintas · se muestra la corrida típica (la mediana de los brotes que crecen, n.º ${trace.run + 1} de ${totalRuns})`;
+    this.note.textContent = `El mismo brote con tres decisiones distintas. Es la simulación típica: la número ${trace.run + 1} de ${totalRuns}.`;
     this.resize();
     this.show(0);
     this.time = 0.2; // empieza al amanecer del día 0
@@ -86,8 +81,14 @@ export class CityPlayer {
     const dpr = window.devicePixelRatio || 1;
     const t = this.trace;
     for (const p of this.panels) {
-      p.canvas.style.aspectRatio = String(t.layout.aspect);
-      const w = Math.max(200, Math.round(p.canvas.clientWidth * dpr));
+      // El mapa entra entero en su recuadro, sin deformarse.
+      const fig = p.canvas.parentElement;
+      const free = fig.clientHeight - fig.querySelector('figcaption').offsetHeight - p.stats.offsetHeight;
+      let cw = fig.clientWidth;
+      if (getComputedStyle(fig.closest('.pane')).position === 'absolute' && free > 40) cw = Math.min(cw, free * t.layout.aspect);
+      p.canvas.style.width = `${cw}px`;
+      p.canvas.style.height = `${cw / t.layout.aspect}px`;
+      const w = Math.max(200, Math.round(cw * dpr));
       const h = Math.round(w / t.layout.aspect);
       p.canvas.width = w;
       p.canvas.height = h;
@@ -110,7 +111,7 @@ export class CityPlayer {
     bg.height = h;
     const ctx = bg.getContext('2d');
     const { shapes } = this.trace.layout;
-    const attribution = '© Esri · © OpenStreetMap'; // la atribución completa va debajo de los mapas
+    const attribution = '© Esri, © OpenStreetMap'; // la atribución completa va debajo de los mapas
     ctx.fillStyle = '#0a0716';
     ctx.fillRect(0, 0, w, h);
     const img = this.mapImage;
@@ -276,14 +277,14 @@ export class CityPlayer {
     const a = t.adaptativa;
     const d = this.day;
     const parts = [];
-    if (d > 0 && a.quarantinesByDay[d - 1]) parts.push(`${fmt(a.quarantinesByDay[d - 1] * t.scale)} hogares a cuarentena`);
+    if (d > 0 && a.quarantinesByDay[d - 1]) parts.push(`${fmt(a.quarantinesByDay[d - 1] * t.scale)} casas en cuarentena`);
     if (d > 0 && a.dosesByDay[d - 1]) parts.push(`${fmt(a.dosesByDay[d - 1] * t.scale)} vacunas aplicadas`);
     for (const c of a.closures) if (c.day === d - 1) parts.push(`cierra ${c.layer === 'mercado' ? 'el mercado' : 'los colegios'} de ${c.parroquia}`);
     for (const f of a.fumigations ?? []) if (f.day === d - 1) parts.push(`brigada de fumigación en ${f.parroquia}`);
     const saved = (t.nada.cumulative[d] - a.cumulative[d]) * t.scale;
     const sentences = [];
     if (d === 0) sentences.push(`Día 0: aparece ${this.terms?.one ?? 'un caso'}. Nadie lo sabe todavía.`);
-    else sentences.push(parts.length ? `Día ${d}. El Comité: ${parts.join(' · ')}.` : `Día ${d}.`);
+    else sentences.push(parts.length ? `Día ${d}. El Comité: ${parts.join(', ')}.` : `Día ${d}.`);
     if (saved > 0) sentences.push(`Hasta hoy, ${fmt(saved)} personas ${this.terms?.bitten ?? 'contagiadas'} menos que sin hacer nada.`);
     this.events.textContent = sentences.join(' ');
   }

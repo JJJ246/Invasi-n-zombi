@@ -9,18 +9,22 @@
   <meta property="og:image" content="film/000.webp">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Special+Elite&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="portada.css">
   <script type="module" src="portada.js"></script>
 </head>
 <body>
+  <header class="topbar">
+    <a class="brand" href="index.html" data-wipe><img src="logo.svg" alt="" width="40" height="40"><b>Comité de Contención</b></a>
+    <a class="go" href="index.html" data-wipe>Abrir el simulador</a>
+  </header>
   <!-- La película: el scroll avanza cuadro a cuadro; los textos aparecen en su momento. -->
   <section class="film" id="film" aria-label="Historia: una noche en Manta">
     <div class="film-sticky">
       <canvas id="filmCanvas"></canvas>
       <div class="film-shade"></div>
       <div class="captions">
-        <p class="cap" data-from="0" data-to="0.11"><span class="time">31 de octubre · 23:47</span>Manta duerme. Los barcos atuneros se mecen en la bahía.</p>
+        <p class="cap" data-from="0" data-to="0.11"><span class="time">31 de octubre, 23:47</span>Manta duerme. Los barcos atuneros se mecen en la bahía.</p>
         <p class="cap" data-from="0.13" data-to="0.25"><span class="time">Mercado de Tarqui</span>Alguien muerde a alguien.<br><b>Nadie lo nota.</b></p>
         <p class="cap" data-from="0.27" data-to="0.38"><span class="time">Si nadie hace nada</span>Casa, bus, colegio, mercado.<br>Uno de cada tres habitantes termina <b class="red">mordido</b>.</p>
         <p class="cap" data-from="0.40" data-to="0.52"><span class="time">Comité de Contención</span>No hay vacunas para todos. No se puede cerrar la ciudad.<br>Solo se ven los casos reportados.</p>
@@ -30,7 +34,7 @@
       </div>
       <div class="film-ui">
         <div class="film-progress"><b id="filmBar"></b></div>
-        <p class="scroll-hint" id="scrollHint">Desliza para ver la historia ↓</p>
+        <p class="scroll-hint" id="scrollHint">Desliza hacia abajo para ver la historia</p>
         <p class="loading" id="filmLoading">Cargando la película…</p>
       </div>
     </div>
@@ -50,7 +54,7 @@
         </div>
         <div class="actions">
           <button type="button" id="worldBtn" class="btn btn-green" disabled>Ver con el plan del Comité</button>
-          <a class="btn btn-orange" href="index.html">Abrir el simulador →</a>
+          <a class="btn btn-orange" href="index.html" data-wipe>Abrir el simulador</a>
         </div>
         <p class="note" id="heroNote">Simulando el brote…</p>
       </div>
@@ -79,8 +83,8 @@
       <div>
         <p class="kicker">Más allá de los zombis</p>
         <h2>El mismo motor, para un brote real.</h2>
-        <p>La ciudad y la enfermedad son datos. El simulador trae <b>Guayaquil</b> con su mapa real y el escenario <b>El Niño 2026</b>: lluvias y calor multiplican los mosquitos y el dengue se dispara en una ciudad de 2,6 millones. Para Manabí, el contagio del dengue está <b>calibrado con los 10.450 casos reales de 2024</b> del Ministerio de Salud Pública (R² = 0,87).</p>
-        <a class="btn btn-green" href="index.html">Probar El Niño en Guayaquil →</a>
+        <p>La enfermedad es un dato. El simulador trae también una <b>gripe fuerte</b> y el <b>dengue de Manabí</b>, con el contagio <b>calibrado con los 10.450 casos reales de 2024</b> del Ministerio de Salud Pública. La curva del motor sigue a la real con un R² de 0,87.</p>
+        <a class="btn btn-green" href="index.html" data-wipe>Probar el dengue en Manta</a>
       </div>
       <svg id="calib" viewBox="0 0 520 220" role="img" aria-label="Casos semanales de dengue en Manabí 2024 y curva del modelo"></svg>
     </section>
@@ -89,9 +93,9 @@
       <p class="kicker">Infraestructura</p>
       <h2>Corre en AWS, sin servidores y dentro de la capa gratuita.</h2>
       <div class="flow">
-        <div class="node"><b>CloudFront + S3</b><small>la web, con HTTPS</small></div><span class="arrow">→</span>
-        <div class="node"><b>API Gateway</b><small>con límite de uso</small></div><span class="arrow">→</span>
-        <div class="node"><b>Lambda ×8</b><small>simulaciones en paralelo</small></div><span class="arrow">→</span>
+        <div class="node"><b>CloudFront y S3</b><small>la web, con HTTPS</small></div><span class="arrow">›</span>
+        <div class="node"><b>API Gateway</b><small>con límite de uso</small></div><span class="arrow">›</span>
+        <div class="node"><b>8 Lambdas</b><small>simulaciones en paralelo</small></div><span class="arrow">›</span>
         <div class="node"><b>S3</b><small>caché: misma semilla, mismo resultado</small></div>
       </div>
       <p class="source">Infraestructura como código (SAM), escaneada con Checkov en cada cambio, y un AWS Budget con alerta desde el primer día.</p>
@@ -100,13 +104,33 @@
     <section class="section final">
       <h2>¿Qué harías tú?</h2>
       <p>Cambia el contagio, las vacunas o dónde empieza. El Comité calcula el mejor plan en segundos.</p>
-      <a class="btn btn-orange big" href="index.html">Abrir el simulador →</a>
+      <a class="btn btn-orange big" href="index.html" data-wipe>Abrir el simulador</a>
     </section>
   </main>
 
   <footer class="foot">
-    <p>Comité de Contención · SpookyThon 2026 · Track B · ULEAM, Manta</p>
-    <p class="attrib">Película e ilustraciones generadas con IA (Higgsfield) a partir de un guion propio · Imagen satelital © Esri, Maxar, Earthstar Geographics · Límites y densidad © colaboradores de <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · Datos de dengue: Ministerio de Salud Pública del Ecuador.</p>
+    <p>Comité de Contención. SpookyThon 2026, Track B, ULEAM, Manta.</p>
+    <p class="attrib">Película e ilustraciones generadas con IA (Higgsfield) a partir de un guion propio. Imagen satelital de Esri, Maxar y Earthstar Geographics. Límites y densidad de los colaboradores de <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>. Datos de dengue del Ministerio de Salud Pública del Ecuador.</p>
   </footer>
+
+  <div class="wipe" id="wipe" aria-hidden="true">
+    <svg viewBox="0 0 1200 140" preserveAspectRatio="none"><path d="M0 0H1200V40C1180 40 1176 96 1160 96S1142 40 1120 40 1090 70 1070 70 1050 40 1020 40 990 128 970 128 950 40 920 40 900 60 880 60 860 40 830 40 806 110 790 110 770 40 740 40 720 64 700 64 680 40 650 40 626 132 610 132 590 40 560 40 540 76 520 76 500 40 470 40 446 104 430 104 410 40 380 40 360 58 340 58 320 40 290 40 266 120 250 120 230 40 200 40 180 80 160 80 140 40 110 40 86 100 70 100 50 40 20 40 10 60 0 60Z"/></svg>
+  </div>
+  <script>
+    // Cortina que chorrea al ir al simulador (y al volver de él).
+    (() => {
+      const wipe = document.getElementById('wipe');
+      if (matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+      if (/index\.html|\/$/.test(document.referrer) && document.referrer.includes(location.host)) wipe.className = 'wipe up';
+      for (const a of document.querySelectorAll('a[data-wipe]')) {
+        a.addEventListener('click', (e) => {
+          if (e.metaKey || e.ctrlKey) return;
+          e.preventDefault();
+          wipe.className = 'wipe down';
+          wipe.addEventListener('animationend', () => (location.href = a.href), { once: true });
+        });
+      }
+    })();
+  </script>
 </body>
 </html>

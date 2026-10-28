@@ -1,14 +1,14 @@
 /* Portada: una película que avanza con el scroll y, después, el motor en vivo y los números. */
 :root {
-  --bg: #06050c;
-  --panel: #110e1d;
-  --line: #262040;
-  --text: #ece8ff;
-  --muted: #a39cc4;
-  --red: #ff4d4d;
-  --yellow: #facc15;
-  --green: #4ade80;
-  --orange: #ff8a1f;
+  --bg: #0a0610;
+  --panel: #140c1c;
+  --line: #352340;
+  --text: #f4ecdc;
+  --muted: #b5a5c2;
+  --red: #e5383b;
+  --yellow: #f5b83d;
+  --green: #8be04e;
+  --orange: #ff7518;
 }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 Inter, system-ui, sans-serif; overflow-x: hidden; }
@@ -102,3 +102,22 @@ code { background: var(--panel); padding: 0.1rem 0.35rem; border-radius: 4px; }
   .section { opacity: 1; transform: none; transition: none; }
   .cap { transition: none; }
 }
+
+/* Misma barra, letra y transición que el simulador: la portada y el simulador son una sola página. */
+h2 { font-family: 'Creepster', 'Special Elite', cursive; font-weight: 400; letter-spacing: 0.03em; }
+.topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 40; display: flex; align-items: center; gap: 1rem; padding: 0.55rem clamp(16px, 2.4vw, 32px); background: linear-gradient(180deg, #0a0610e6, #0a061000); }
+.topbar .brand { display: flex; align-items: center; gap: 0.6rem; color: var(--text); text-decoration: none; margin-right: auto; }
+.topbar .brand b { font: 1.35rem/1 'Creepster', cursive; letter-spacing: 0.04em; color: var(--orange); text-shadow: 0 0 18px #ff751855; }
+.topbar .go { padding: 0.5rem 1rem; border-radius: 999px; background: var(--orange); color: #1a0b00; font-weight: 800; text-decoration: none; font-size: 0.9rem; box-shadow: 0 6px 22px #ff751855; }
+.wipe { position: fixed; inset: 0; z-index: 100; pointer-events: none; transform: translateY(-130%); }
+.wipe::before { content: ""; position: absolute; inset: 0 0 139px; background: linear-gradient(180deg, #2b0a06, #7a1d0c 60%, #b8320f); }
+.wipe svg { position: absolute; left: 0; bottom: 0; width: 100%; height: 140px; fill: #b8320f; }
+.wipe.down { animation: wipe-down 0.5s cubic-bezier(.6, 0, .4, 1) forwards; }
+.wipe.up { animation: wipe-out 0.75s cubic-bezier(.6, 0, .4, 1) forwards; }
+@keyframes wipe-down { from { transform: translateY(-130%); } to { transform: translateY(0); } }
+@keyframes wipe-out { from { transform: translateY(0); } to { transform: translateY(130%); } }
+@media (prefers-reduced-motion: reduce) { .wipe { display: none; } }
+
+/* Sin barra de scroll visible: la película se recorre igual con la rueda o el dedo. */
+html { scrollbar-width: none; }
+html::-webkit-scrollbar { width: 0; height: 0; }

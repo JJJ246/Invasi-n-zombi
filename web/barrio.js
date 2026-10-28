@@ -295,7 +295,8 @@ export class Barrio {
           role: P.role[i],
           bus: P.role[i] === 2 && P.bus[i] >= 0,
           yard: { x: house.x + 0.2 + (k % 3) * 0.32, y: house.y + 1.25 + Math.floor(k / 3) * 0.3 },
-          shirt: pick(SHIRTS, r(1)), pants: pick(PANTS, r(2)), skin: house.skin,
+          // Estudiantes con uniforme (camisa blanca, pantalón azul), como en los colegios de Manta.
+          shirt: P.role[i] === 1 ? '#f1f1ec' : pick(SHIRTS, r(1)), pants: P.role[i] === 1 ? '#22305a' : pick(PANTS, r(2)), skin: house.skin,
           hair: who.age >= 65 ? '#d6d3cc' : pick(['#1d1612', '#2e2018', '#4a2f1d'], r(3)),
           j1: r(4), j2: r(5), j3: r(6),
         };
@@ -308,7 +309,7 @@ export class Barrio {
     }
     this.hasBus = this.people.some((p) => p.bus);
     this.decor = this.makeDecor();
-    this.nameEl.textContent = `${look.blurb[0].toUpperCase()}${look.blurb.slice(1)} · ${this.houses.length} casas · ${this.people.length} vecinos`;
+    this.nameEl.textContent = `${look.blurb[0].toUpperCase()}${look.blurb.slice(1)}. ${this.houses.length} casas y ${this.people.length} vecinos.`;
     this.countsDay = -1;
     this.captionKey = '';
     this.zoom = 1;
@@ -327,17 +328,18 @@ export class Barrio {
     const homes = [hs.reduce((s, h) => s + h.x, 0) / hs.length + 0.5, hs.reduce((s, h) => s + h.y, 0) / hs.length + 1];
     const near = hs.slice().sort((a, b) => Math.hypot(a.x - homes[0], a.y - homes[1]) - Math.hypot(b.x - homes[0], b.y - homes[1]))[0];
     return {
-      todo: { label: 'Todo el barrio', zoom: 1, center: [G / 2, G / 2] },
-      casas: { label: 'Las casas', zoom: 1.8, center: [near.x + 0.5, near.y + 1] },
-      mercado: { label: pl.market.label, zoom: 1.8, center: mid(pl.market.area) },
-      trabajo: { label: pl.work.label, zoom: 1.7, center: mid(pl.work.area) },
-      colegio: { label: pl.school.label, zoom: 1.8, center: mid(pl.school.area) },
+      todo: { label: 'Todo', icon: 'i-map', zoom: 1, center: [G / 2, G / 2] },
+      casas: { label: 'Casa', icon: 'i-home', zoom: 1.9, center: [near.x + 0.5, near.y + 1] },
+      bus: { label: 'Bus', icon: 'i-bus', zoom: 1.9, center: [this.stop.x + 0.6, this.stop.y + 0.8] },
+      colegio: { label: pl.school.label, icon: 'i-school', zoom: 1.8, center: mid(pl.school.area) },
+      mercado: { label: 'Mercado', icon: 'i-market', zoom: 1.8, center: mid(pl.market.area) },
+      trabajo: { label: pl.work.label, icon: 'i-users', zoom: 1.7, center: mid(pl.work.area) },
     };
   }
 
   renderCams() {
     const c = this.cams();
-    this.camsEl.innerHTML = Object.entries(c).map(([k, v]) => `<button type="button" data-cam="${k}" class="${k === this.camName ? 'on' : ''}">${v.label}</button>`).join('');
+    this.camsEl.innerHTML = Object.entries(c).map(([k, v]) => `<button type="button" data-cam="${k}" class="${k === this.camName ? 'on' : ''}"><svg class="ic"><use href="#${v.icon}"/></svg>${v.label}</button>`).join('');
   }
 
   view(name) {
@@ -435,6 +437,26 @@ export class Barrio {
         }
       }
     }
+    // Faroles a lo largo de las calles, unidos por cables de luz.
+    for (const c of ROADS) {
+      let prev = null;
+      for (let x = plan.landX(c) + 1.5; x < G; x += 3) {
+        const d = { type: 'farol', x, y: c - 1.2 };
+        if (prev) prev.next = d;
+        out.push(d);
+        prev = d;
+      }
+    }
+    // Patios: ropa tendida y plantas junto a la puerta.
+    for (const hs of this.houses) {
+      if (hs.stilts) continue;
+      if (hash(hs.home, 41) < 0.35) out.push({ type: 'ropa', x: hs.x + 0.05, y: hs.y + 1.62, k: hs.home });
+      if (hash(hs.home, 42) < 0.5) out.push({ type: 'maceta', x: hs.x + 0.82, y: hs.y + 1.14 });
+    }
+    const sa = this.places.school.area;
+    out.push({ type: 'bandera', x: sa.x + 0.5, y: sa.y + 0.5 }, { type: 'aro', x: sa.x + sa.w - 0.6, y: sa.y + sa.h / 2 });
+    const ma = this.places.market.area;
+    out.push({ type: 'tacho', x: ma.x + ma.w - 0.3, y: ma.y + ma.h - 0.3 }, { type: 'tacho', x: sa.x + 0.3, y: sa.y + sa.h - 0.3 });
     for (let k = 0; k < 6; k++) {
       const c = ROADS[k % 2];
       out.push({ type: 'auto', x: plan.landX(c) + 2 + hash(k, z + 8) * (G - plan.landX(c) - 4), y: c + 0.62, color: pick(['#e85d5d', '#f4f4f4', '#2f3b52', '#4f8fe8', '#f2c94c'], hash(k, z + 9)) });
@@ -750,11 +772,51 @@ export class Barrio {
       ctx.stroke();
     }
     const glass = night > 0.3 ? `rgba(255, 214, 120, ${0.5 + 0.5 * night})` : '#33485c';
-    this.pane(ctx, 'y', b, 0.38, 0.62, 0, 0.46, '#6b4a33', base);
+    // Puerta con marco y escalón.
+    this.pane(ctx, 'y', b, 0.35, 0.65, 0, 0.5, shade(hs.wall, 0.35), base);
+    this.pane(ctx, 'y', b, 0.38, 0.62, 0, 0.46, hash(hs.home, 33) < 0.5 ? '#6b4a33' : '#3d4f5f', base);
+    this.pane(ctx, 'y', b, 0.56, 0.59, 0.2, 0.25, '#e6c36a', base);
+    if (!hs.stilts) this.rect(ctx, hs.x + 0.34, hs.y + 1, 0.32, 0.12, '#a39d92', 0.03);
     for (const [f, a0, a1, z0, z1] of this.windowsOf(hs)) {
       this.pane(ctx, f, b, a0 - 0.03, a1 + 0.03, z0 - 0.03, z1 + 0.03, 'rgba(240, 235, 225, 0.75)', base);
       this.pane(ctx, f, b, a0, a1, z0, z1, glass, base);
+      // Reflejo del cielo en el vidrio.
+      if (night < 0.3) this.pane(ctx, f, b, a0, a0 + (a1 - a0) * 0.35, z0 + (z1 - z0) * 0.4, z1, 'rgba(180, 210, 235, 0.25)', base);
     }
+    // Rejas en las ventanas de abajo, muy comunes en la costa.
+    if (!hs.stilts && this.tw > 34 && hash(hs.home, 31) < 0.6) {
+      ctx.strokeStyle = 'rgba(25, 20, 18, 0.75)';
+      ctx.lineWidth = Math.max(0.6, this.tw * 0.012);
+      ctx.beginPath();
+      for (const [f, a0, a1, z0, z1] of this.windowsOf(hs)) {
+        if (z0 > 0.5) continue;
+        const Q = (u, z) => (f === 'y' ? this.P(b.x + u, b.y + 1, base + z) : this.P(b.x + 1, b.y + u, base + z));
+        for (let u = a0 + 0.045; u < a1; u += 0.06) {
+          ctx.moveTo(...Q(u, z0 - 0.02));
+          ctx.lineTo(...Q(u, z1 + 0.02));
+        }
+      }
+      ctx.stroke();
+    }
+    // Balcón con baranda en las casas de dos pisos o más.
+    if (hs.stories >= 2 && !hs.stilts && hash(hs.home, 32) < 0.7) {
+      const z = base + 0.5;
+      const [u0, u1, d] = [0.18, 0.82, 0.2];
+      this.poly(ctx, [this.P(b.x + u0, b.y + 1, z), this.P(b.x + u1, b.y + 1, z), this.P(b.x + u1, b.y + 1 + d, z), this.P(b.x + u0, b.y + 1 + d, z)], '#ddd6ca');
+      this.poly(ctx, [this.P(b.x + u0, b.y + 1 + d, z), this.P(b.x + u1, b.y + 1 + d, z), this.P(b.x + u1, b.y + 1 + d, z - 0.05), this.P(b.x + u0, b.y + 1 + d, z - 0.05)], '#a39b8f');
+      ctx.strokeStyle = 'rgba(40, 34, 30, 0.85)';
+      ctx.lineWidth = Math.max(0.6, this.tw * 0.012);
+      ctx.beginPath();
+      ctx.moveTo(...this.P(b.x + u0, b.y + 1 + d, z + 0.17));
+      ctx.lineTo(...this.P(b.x + u1, b.y + 1 + d, z + 0.17));
+      for (let u = u0; u <= u1 + 0.001; u += 0.08) {
+        ctx.moveTo(...this.P(b.x + u, b.y + 1 + d, z));
+        ctx.lineTo(...this.P(b.x + u, b.y + 1 + d, z + 0.17));
+      }
+      ctx.stroke();
+    }
+    // Aire acondicionado en la pared del costado.
+    if (!hs.stilts && !hs.cana && hash(hs.home, 34) < 0.4) this.box(ctx, { x: b.x + 1, y: b.y + 0.25, w: 0.09, h: 0.26, z: 0.16 }, '#dfe4e8', '#cfd5da', 'losa', base + 0.55);
     if (hs.tank) {
       // Tanque de agua azul en la losa, típico de la costa.
       const [tx, ty] = this.P(hs.x + 0.3, hs.y + 0.3, base + hs.z + 0.05);
@@ -900,19 +962,140 @@ export class Barrio {
     for (const a of [0.4, 2.4]) this.pane(ctx, 'y', body, a, a + 0.35, 0.55, 1.05, night > 0.3 ? '#ffd678' : '#5a7a99');
   }
 
+  // Farol de calle con su cable hasta el siguiente.
+  drawLamp(ctx, d, night) {
+    const tw = this.tw;
+    const base = this.P(d.x, d.y);
+    const top = this.P(d.x, d.y, 1.45);
+    this.line(ctx, base, top, '#4a4f57', Math.max(1, tw * 0.035));
+    const arm = this.P(d.x, d.y + 0.35, 1.4);
+    this.line(ctx, top, arm, '#4a4f57', Math.max(1, tw * 0.025));
+    ctx.fillStyle = night > 0.3 ? '#ffe6a3' : '#c9cdd2';
+    ctx.beginPath();
+    ctx.ellipse(arm[0], arm[1] + tw * 0.02, tw * 0.07, tw * 0.035, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (d.next) {
+      const b = this.P(d.next.x, d.next.y, 1.45);
+      ctx.strokeStyle = 'rgba(20, 18, 22, 0.55)';
+      ctx.lineWidth = Math.max(0.6, tw * 0.01);
+      ctx.beginPath();
+      ctx.moveTo(...top);
+      ctx.quadraticCurveTo((top[0] + b[0]) / 2, (top[1] + b[1]) / 2 + tw * 0.12, b[0], b[1]);
+      ctx.stroke();
+    }
+  }
+
+  // Cordel con ropa tendida en el patio; se mueve con el viento.
+  drawLaundry(ctx, d, now) {
+    const tw = this.tw;
+    const a = this.P(d.x, d.y, 0.5);
+    const b = this.P(d.x + 0.95, d.y, 0.5);
+    this.line(ctx, this.P(d.x, d.y), a, '#6b5a48', Math.max(1, tw * 0.02));
+    this.line(ctx, this.P(d.x + 0.95, d.y), b, '#6b5a48', Math.max(1, tw * 0.02));
+    this.line(ctx, a, b, 'rgba(230, 230, 230, 0.7)', Math.max(0.5, tw * 0.008));
+    const colors = ['#e85d5d', '#f4f4f4', '#4f8fe8', '#f2c94c', '#5bbf8a', '#e87fb0'];
+    for (let k = 0; k < 4; k++) {
+      const f = 0.12 + k * 0.22;
+      const x = a[0] + (b[0] - a[0]) * f;
+      const y = a[1] + (b[1] - a[1]) * f;
+      const sway = Math.sin(now / 600 + k + d.x) * tw * 0.015;
+      ctx.fillStyle = colors[(k + d.k) % colors.length];
+      ctx.beginPath();
+      ctx.moveTo(x - tw * 0.06, y);
+      ctx.lineTo(x + tw * 0.06, y + tw * 0.03);
+      ctx.lineTo(x + tw * 0.06 + sway, y + tw * 0.17);
+      ctx.lineTo(x - tw * 0.06 + sway, y + tw * 0.14);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  drawPot(ctx, d) {
+    const [x, y] = this.P(d.x, d.y, 0.08);
+    const u = this.tw;
+    ctx.fillStyle = '#a0522d';
+    ctx.beginPath();
+    ctx.moveTo(x - u * 0.06, y - u * 0.08);
+    ctx.lineTo(x + u * 0.06, y - u * 0.08);
+    ctx.lineTo(x + u * 0.045, y + u * 0.02);
+    ctx.lineTo(x - u * 0.045, y + u * 0.02);
+    ctx.fill();
+    for (const [dx, dy, r, c] of [[-0.04, -0.14, 0.07, '#2f6b34'], [0.04, -0.15, 0.06, '#3f8a43'], [0, -0.2, 0.06, '#4b9a4c']]) {
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.arc(x + dx * u, y + dy * u, r * u, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  drawBin(ctx, d) {
+    this.box(ctx, { x: d.x - 0.12, y: d.y - 0.12, w: 0.24, h: 0.24, z: 0.32 }, '#2f7d4f', '#256b42');
+  }
+
+  // Asta con la bandera del Ecuador en el patio del colegio.
+  drawFlag(ctx, d, now) {
+    const tw = this.tw;
+    const base = this.P(d.x, d.y);
+    const top = this.P(d.x, d.y, 2.2);
+    this.line(ctx, base, top, '#d5d8dc', Math.max(1, tw * 0.03));
+    const wave = (k) => Math.sin(now / 350 + k * 1.7) * tw * 0.025;
+    const L = tw * 0.5;
+    const h = tw * 0.1;
+    ['#f7d117', '#0b4ea2', '#e1251b'].forEach((c, k) => {
+      const y0 = top[1] + (k === 0 ? 0 : k === 1 ? h * 2 : h * 3);
+      const hh = k === 0 ? h * 2 : h;
+      ctx.fillStyle = c;
+      ctx.beginPath();
+      ctx.moveTo(top[0], y0);
+      ctx.quadraticCurveTo(top[0] + L / 2, y0 + wave(1), top[0] + L, y0 + wave(2));
+      ctx.lineTo(top[0] + L, y0 + hh + wave(2));
+      ctx.quadraticCurveTo(top[0] + L / 2, y0 + hh + wave(1), top[0], y0 + hh);
+      ctx.fill();
+    });
+  }
+
+  // Aro de básquet de la cancha del colegio.
+  drawHoop(ctx, d) {
+    const tw = this.tw;
+    this.line(ctx, this.P(d.x, d.y), this.P(d.x, d.y, 1.5), '#5d6d7e', Math.max(1, tw * 0.04));
+    const [bx, by] = this.P(d.x - 0.1, d.y, 1.55);
+    ctx.fillStyle = '#f4f4f4';
+    ctx.fillRect(bx - tw * 0.16, by - tw * 0.2, tw * 0.32, tw * 0.2);
+    ctx.strokeStyle = '#e85d5d';
+    ctx.lineWidth = Math.max(1, tw * 0.02);
+    ctx.strokeRect(bx - tw * 0.07, by - tw * 0.12, tw * 0.14, tw * 0.1);
+    ctx.beginPath();
+    ctx.ellipse(bx - tw * 0.08, by + tw * 0.01, tw * 0.08, tw * 0.03, 0, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
   drawStall(ctx, x, y, k, closed) {
     const b = { x, y, w: 1.4, h: 1, z: 0.5 };
     this.box(ctx, b, '#8a6440', '#8a6440');
     const colors = [['#e85d5d', '#f4efe2'], ['#4f8fe8', '#f4efe2'], ['#f2c94c', '#e85d5d'], ['#5bbf8a', '#f4efe2']][k % 4];
     for (let s = 0; s < 4; s++) this.poly(ctx, [this.P(x - 0.1 + s * 0.4, y - 0.1, 0.95), this.P(x + 0.3 + s * 0.4, y - 0.1, 0.95), this.P(x + 0.3 + s * 0.4, y + 1.15, 0.8), this.P(x - 0.1 + s * 0.4, y + 1.15, 0.8)], colors[s % 2]);
     if (!closed) {
+      const fish = /marisco|pescado/i.test(this.places.market.label);
       for (let s = 0; s < 3; s++) {
-        const [fx, fy] = this.P(x + 0.3 + s * 0.4, y + 1, 0.55);
-        ctx.fillStyle = ['#f2994a', '#6fcf97', '#eb5757'][s];
-        ctx.beginPath();
-        ctx.arc(fx, fy, this.tw * 0.05, 0, Math.PI * 2);
-        ctx.fill();
+        for (let r = 0; r < 3; r++) {
+          const [fx, fy] = this.P(x + 0.18 + s * 0.42 + r * 0.1, y + 0.9 - r * 0.08, 0.55);
+          if (fish && k % 2 === 0) {
+            // Pescado sobre hielo.
+            ctx.fillStyle = r === 1 ? '#c9d6df' : '#9fb3c2';
+            ctx.beginPath();
+            ctx.ellipse(fx, fy, this.tw * 0.07, this.tw * 0.025, -0.3, 0, Math.PI * 2);
+            ctx.fill();
+          } else {
+            ctx.fillStyle = [['#f2994a', '#f2c94c', '#eb5757'], ['#6fcf97', '#27ae60', '#a3d977'], ['#eb5757', '#c0392b', '#f2994a']][s][r];
+            ctx.beginPath();
+            ctx.arc(fx, fy, this.tw * 0.04, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
       }
+      // Gavetas apiladas delante del puesto.
+      this.box(ctx, { x: x + 1.05, y: y + 1.12, w: 0.3, h: 0.22, z: 0.16 }, '#b07a45', '#8a5a30');
+      this.box(ctx, { x: x + 1.05, y: y + 1.12, w: 0.3, h: 0.22, z: 0.14 }, '#c08a55', k % 2 ? '#6fcf97' : '#f2994a', 'losa', 0.16);
     }
   }
 
@@ -978,12 +1161,46 @@ export class Barrio {
     ctx.textAlign = 'start';
   }
 
-  drawBus(ctx, x, y) {
+  // Bus urbano: carrocería blanca con franjas, ventanas con pasajeros, parabrisas, letrero y ruedas.
+  drawBus(ctx, x, y, riders = []) {
     const b = { x, y, w: 2.4, h: 0.85, z: 0.85 };
-    this.box(ctx, b, '#f2c94c', '#e9e4d4');
-    for (let k = 0; k < 4; k++) this.pane(ctx, 'y', b, 0.2 + k * 0.55, 0.6 + k * 0.55, 0.42, 0.72, '#2c3e50');
-    this.pane(ctx, 'x', b, 0.15, 0.7, 0.4, 0.75, '#2c3e50');
-    this.pane(ctx, 'y', b, 0, 2.4, 0.18, 0.26, '#2f80ed');
+    const tw = this.tw;
+    this.box(ctx, b, '#f1efe8', '#dcd8cc', 'losa', 0.1);
+    this.pane(ctx, 'y', b, 0, 2.4, 0.2, 0.3, '#2f80ed', 0.1);
+    this.pane(ctx, 'y', b, 0, 2.4, 0.3, 0.34, '#f2c94c', 0.1);
+    for (let k = 0; k < 4; k++) this.pane(ctx, 'y', b, 0.15 + k * 0.5, 0.58 + k * 0.5, 0.4, 0.72, '#22313f', 0.1);
+    this.pane(ctx, 'y', b, 2.1, 2.32, 0.05, 0.7, '#3b4b5a', 0.1); // puerta
+    // Cabezas de los pasajeros en las ventanas, con el color de su estado.
+    riders.slice(0, 8).forEach((r, k) => {
+      const [hx, hy] = this.P(x + 0.28 + (k % 4) * 0.5 + (k >= 4 ? 0.2 : 0), y + b.h, 0.1 + 0.6);
+      ctx.fillStyle = r.skin;
+      ctx.beginPath();
+      ctx.arc(hx, hy, tw * 0.055, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = r.color;
+      ctx.beginPath();
+      ctx.arc(hx, hy - tw * 0.1, tw * 0.025, 0, Math.PI * 2);
+      ctx.fill();
+    });
+    this.pane(ctx, 'x', b, 0.08, 0.77, 0.38, 0.76, '#2c4a63', 0.1); // parabrisas
+    this.pane(ctx, 'x', b, 0.2, 0.65, 0.77, 0.83, '#111', 0.1);
+    ctx.fillStyle = '#ffb347';
+    const [lx, ly] = this.P(x + b.w, y + 0.42, 0.9);
+    ctx.font = `700 ${Math.max(7, tw * 0.07)}px Inter, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.fillText('MANTA', lx, ly);
+    ctx.textAlign = 'start';
+    for (const u of [0.45, 1.95]) {
+      const [wx, wy] = this.P(x + u, y + b.h, 0.1);
+      ctx.fillStyle = '#16161a';
+      ctx.beginPath();
+      ctx.ellipse(wx, wy, tw * 0.11, tw * 0.09, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#7a7f87';
+      ctx.beginPath();
+      ctx.ellipse(wx, wy, tw * 0.045, tw * 0.035, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
   }
 
   // ---------- Personas ----------
@@ -1055,6 +1272,12 @@ export class Barrio {
     // Torso con volumen.
     const tx = sx + lean * 0.5;
     const torsoTop = y0 - u * 4.25;
+    if (p.role === 1 && !zombie) {
+      ctx.fillStyle = pick(['#c0392b', '#2f6fb5', '#27ae60', '#8e44ad'], p.j2);
+      ctx.beginPath();
+      ctx.roundRect(tx - u * 0.62 - pos.dir * u * 0.35, torsoTop + u * 0.2, u * 1.24, u * 1.5, u * 0.3);
+      ctx.fill();
+    }
     const g = ctx.createLinearGradient(tx - u * 0.8, 0, tx + u * 0.8, 0);
     const shirt = zombie ? shade(p.shirt, -0.45) : p.shirt;
     g.addColorStop(0, shade(shirt, 0.18));
@@ -1210,7 +1433,7 @@ export class Barrio {
         if (d >= 0 && d <= day) total++;
       }
       const activeText = this.zombie ? (active === 1 ? 'zombi' : 'zombis') : active === 1 ? 'caso activo' : 'casos activos';
-      return `<button type="button" data-strategy="${k}" class="${k === this.strategy ? 'on' : ''}" aria-pressed="${k === this.strategy}"><b>${label}</b><span><em>${active}</em> ${activeText} hoy · <em>${total}</em> ${T.bittenM} en total</span></button>`;
+      return `<button type="button" data-strategy="${k}" class="${k === this.strategy ? 'on' : ''}" aria-pressed="${k === this.strategy}"><b>${label}</b><span><em>${active}</em> ${activeText} hoy, <em>${total}</em> ${T.bittenM} en total</span></button>`;
     }).join('');
   }
 
@@ -1263,7 +1486,8 @@ export class Barrio {
       items.push({ key: hs.x + hs.y + 1, draw: () => this.drawHouse(ctx, hs, night, quarantined) });
     }
     for (const d of this.decor) {
-      const draw = d.type === 'bote' ? () => this.drawBoat(ctx, d, now) : d.type === 'auto' ? () => this.drawCar(ctx, d) : d.type === 'iglesia' ? () => this.drawChurch(ctx, d, night) : () => this.drawTree(ctx, d, now);
+      const special = { bote: () => this.drawBoat(ctx, d, now), auto: () => this.drawCar(ctx, d), iglesia: () => this.drawChurch(ctx, d, night), farol: () => this.drawLamp(ctx, d, night), ropa: () => this.drawLaundry(ctx, d, now), maceta: () => this.drawPot(ctx, d), tacho: () => this.drawBin(ctx, d), bandera: () => this.drawFlag(ctx, d, now), aro: () => this.drawHoop(ctx, d) };
+      const draw = special[d.type] ?? (() => this.drawTree(ctx, d, now));
       items.push({ key: d.type === 'iglesia' ? d.x + d.y + 2.6 : d.x + d.y + (d.type === 'bote' ? 0.8 : 0), draw });
     }
     const ma = this.places.market.area;
@@ -1274,7 +1498,10 @@ export class Barrio {
     }
     const sb = this.places.school;
     items.push({ key: sb.box.x + sb.box.y + (sb.box.w + sb.box.h) / 2, draw: () => {
-      this.box(ctx, sb.box, sb.wall, sb.roof);
+      this.box(ctx, sb.box, sb.wall, sb.roof, 'losa', 0, { texture: true });
+      this.pane(ctx, 'y', sb.box, 0, sb.box.w, 0, 0.22, '#3d6fb0');
+      this.pane(ctx, 'y', sb.box, 0, sb.box.w, 0.22, 0.27, '#f2c94c');
+      this.pane(ctx, 'y', sb.box, sb.box.w / 2 - 0.3, sb.box.w / 2 + 0.3, 0, 0.62, '#5a3d28');
       const glass = night > 0.3 ? 'rgba(255, 214, 120, 0.8)' : '#3b5268';
       for (let k = 0; k < 4; k++) this.pane(ctx, 'y', sb.box, 0.3 + k * 1.05, 0.8 + k * 1.05, 0.45, 0.9, glass);
       for (let k = 0; k < 2; k++) this.pane(ctx, 'x', sb.box, 0.3 + k * 1.2, 0.95 + k * 1.2, 0.45, 0.9, glass);
@@ -1283,12 +1510,27 @@ export class Barrio {
     items.push({ key: wk.box.x + wk.box.y + (wk.box.w + wk.box.h) / 2, draw: () => this.drawWork(ctx, wk, night, now) });
     const st = this.stop;
     items.push({ key: st.x + st.y - 0.6, draw: () => this.box(ctx, { x: st.x - 0.55, y: st.y - 0.5, w: 1.1, h: 0.3, z: 0.75 }, '#5d6d7e', '#2f80ed') });
+    let busVisible = false;
     if (this.hasBus) {
       const c = ROADS[0];
       const x0 = this.plan.landX(c) - 3;
-      const span = G + 4 - x0;
-      const busX = phase >= 0.34 && phase < 0.4 ? x0 + ((phase - 0.34) / 0.06) * span : phase >= 0.61 && phase < 0.67 ? x0 + ((phase - 0.61) / 0.06) * span : null;
-      if (busX !== null) items.push({ key: busX + c + 0.4, draw: () => this.drawBus(ctx, busX, c - 0.9) });
+      const x1 = G + 2;
+      const stopX = st.x - 1.2;
+      const ease = (u) => 1 - (1 - u) ** 2;
+      let busX = null;
+      for (const [a, b, cc, d] of [[0.33, 0.355, 0.378, 0.405], [0.605, 0.632, 0.652, 0.68]]) {
+        if (phase >= a && phase < b) busX = x0 + (stopX - x0) * ease((phase - a) / (b - a));
+        else if (phase >= b && phase < cc) busX = stopX;
+        else if (phase >= cc && phase < d) busX = stopX + (x1 - stopX) * ((phase - cc) / (d - cc)) ** 2;
+      }
+      if (busX !== null) {
+        busVisible = true;
+        // Pasajeros del barrio arriba del bus (después de subir en la mañana, antes de bajar en la tarde).
+        const aboard = (phase >= 0.37 && phase < 0.42) || (phase >= 0.6 && phase < 0.645);
+        const riders = aboard ? this.people.filter((p) => p.bus && !(run.frames[base + p.i] & 8)).map((p) => ({ skin: (run.frames[base + p.i] & 7) === 2 && this.zombie ? ZOMBIE_SKIN : p.skin, color: STATE_COLOR[run.frames[base + p.i] & 7] })) : [];
+        this.busAt = { x: busX + 1.2, y: c - 0.45 };
+        items.push({ key: busX + c + 0.4, draw: () => this.drawBus(ctx, busX, c - 0.9, riders) });
+      }
     }
 
     const drawn = [];
@@ -1350,10 +1592,14 @@ export class Barrio {
 
     // Carteles de los lugares.
     const pl = this.places;
-    this.sign(ctx, ma.x + ma.w / 2, ma.y + ma.h / 2, 1.8, closed.mercado ? `${pl.market.label} · CERRADO` : pl.market.label, closed.mercado ? '#b42318' : undefined);
-    this.sign(ctx, sb.box.x + sb.box.w / 2, sb.box.y + sb.box.h / 2, sb.box.z + 0.9, closed.colegio ? `${sb.label} · CERRADO` : sb.label, closed.colegio ? '#b42318' : undefined);
+    this.sign(ctx, ma.x + ma.w / 2, ma.y + ma.h / 2, 1.8, closed.mercado ? `CERRADO: ${pl.market.label}` : pl.market.label, closed.mercado ? '#b42318' : undefined);
+    this.sign(ctx, sb.box.x + sb.box.w / 2, sb.box.y + sb.box.h / 2, sb.box.z + 0.9, closed.colegio ? `CERRADO: ${sb.label}` : sb.label, closed.colegio ? '#b42318' : undefined);
     this.sign(ctx, wk.box.x + wk.box.w / 2, wk.box.y + wk.box.h / 2, wk.box.z + 0.9, wk.label);
     if (this.hasBus) this.sign(ctx, st.x, st.y - 0.4, 1.35, 'Parada de bus', '#2f6fb5');
+    // Si hoy alguien del barrio se contagió en el bus, se avisa encima del bus.
+    if (busVisible && this.people.some((p) => story.infectedDay[p.i] === day && story.infectedLayer[p.i] === 3)) {
+      this.sign(ctx, this.busAt.x, this.busAt.y, 1.9, this.zombie ? '¡Mordida en el bus!' : 'Contagio en el bus', '#b42318');
+    }
     if (fumigating) this.sign(ctx, G / 2, G / 2, 2.4, 'Brigada de fumigación', '#0f766e');
 
     // Encima de todo: rombos, efectos y globos de lo que pasó hoy, y quién mordió a quién.
@@ -1455,11 +1701,19 @@ export class Barrio {
     if (fresh) parts.push(this.zombie ? n(fresh, 'vecino se convirtió en zombi', 'vecinos se convirtieron en zombis') : n(fresh, 'vecino empezó con síntomas', 'vecinos empezaron con síntomas'));
     if (bit) parts.push(this.zombie ? n(bit, 'mordido', 'mordidos') : n(bit, 'contagio nuevo', 'contagios nuevos'));
     if (vax) parts.push(n(vax, 'vacuna aplicada', 'vacunas aplicadas'));
-    if (q) parts.push(`${n(q, 'casa', 'casas')} en cuarentena (cinta morada)`);
+    if (q) parts.push(`${n(q, 'casa', 'casas')} en cuarentena, con cinta morada`);
     if (closed.mercado) parts.push('el mercado está cerrado');
     if (closed.colegio) parts.push('el colegio está cerrado y los niños se quedan en casa');
     if (fumigating) parts.push('pasa la brigada de fumigación');
     const nightNote = this.zombie && isNight ? ' De noche todos duermen, menos los zombis.' : '';
-    this.captionEl.textContent = (parts.length ? `Hoy: ${parts.join(' · ')}.` : 'Un día normal en el barrio.') + nightNote;
+    const list = parts.length > 1 ? `${parts.slice(0, -1).join(', ')} y ${parts[parts.length - 1]}` : parts[0];
+    this.captionEl.textContent = (parts.length ? `Hoy: ${list}.` : 'Un día normal en el barrio.') + nightNote;
+    // Un destello verde en el borde cuando aparece un zombi nuevo.
+    if (fresh && this.zombie && this.strategy !== 'adaptativa') {
+      const wrap = this.canvas.parentElement;
+      wrap.classList.remove('flash');
+      void wrap.offsetWidth;
+      wrap.classList.add('flash');
+    }
   }
 }
