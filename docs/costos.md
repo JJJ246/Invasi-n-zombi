@@ -42,8 +42,8 @@ Controles de costo incluidos en la infraestructura:
 
 ## 3. Cuánto se gastó realmente durante el evento
 
-| Fecha | Gasto acumulado (AWS Billing) | Evidencia |
+| Fecha | Gasto acumulado (AWS Budgets) | Evidencia |
 |---|---|---|
-| _por completar tras el despliegue_ | USD _x,xx_ | `docs/budget.png` y captura de Cost Explorer |
+| 28-oct-2026, 08:59 (hora de Ecuador) | **USD 0,00** de USD 5,00 (0 %) | [`docs/budget.png`](budget.png) y `aws budgets describe-budgets` |
 
-> Este valor debe copiarse de la consola de AWS Billing el día de la entrega para que coincida con lo que muestra la cuenta.
+Todo el uso del evento (pruebas de la API, Lambda, S3 y CloudFront) quedó dentro de la capa gratuita, por eso el gasto real es cero. Coincide con la estimación de la sección 2. AWS aclara que los datos de gasto pueden tardar hasta 24 horas en aparecer.
