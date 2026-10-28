@@ -6,7 +6,7 @@
 - **Arquitectura:** [docs/arquitectura.svg](docs/arquitectura.svg) (fuente: [docs/arquitectura.mmd](docs/arquitectura.mmd))
 - **Costos:** [docs/costos.md](docs/costos.md)
 - **Resultados reproducibles de todos los escenarios:** [docs/resultados.md](docs/resultados.md)
-- **Presentación del pitch:** [docs/pitch.pdf](docs/pitch.pdf)
+- **Presentación del pitch:** [docs/pitch.pptx](docs/pitch.pptx) (PowerPoint, con notas del orador) y [docs/pitch.pdf](docs/pitch.pdf)
 - **AWS Budget con alerta:** [docs/budget.png](docs/budget.png) _(captura de la consola)_
 
 ![Arquitectura](docs/arquitectura.svg)
