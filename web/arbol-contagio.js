@@ -5,6 +5,15 @@ import { persona } from './ficha-vecino.js';
 import { CITIES } from './engine/cities.js';
 
 const PLACE = ['en casa', 'en el colegio', 'en el trabajo', 'en el bus', 'en el mercado', 'en el barrio'];
+// La frase de la cadena de contagio del paciente cero, con plural y género correctos.
+function chainText(zombie, female, direct, total, day, people) {
+  const who = female ? 'Ella' : 'Él';
+  if (!direct) return `${who} todavía no ${zombie ? 'mordió' : 'contagió'} a nadie.`;
+  const verb = zombie ? 'mordió' : 'contagió';
+  const first = `${who} ${verb} a <b>${fmt(direct)}</b> ${direct === 1 ? 'persona' : 'personas'}`;
+  if (total <= direct + 1) return `${first}.`;
+  return `${first} y la cadena llega a <b>${fmt(total)}</b> vecinos el día ${day} (unos ${fmt(people)} habitantes).`;
+}
 const EDGE = ['#c8a6dc', '#f2c94c', '#8fbcd4', '#ff9f43', '#ff6b6b', '#9be15d'];
 const STATE_COLOR = ['#5fd38d', '#facc15', '#ff3b3b', '#60a5fa', '#2dd4bf'];
 const KEEP = [3, 4, 2, 2]; // ramas visibles por generación: pacientes cero, 1.ª, 2.ª y 3.ª generación
@@ -192,7 +201,7 @@ export class ContagionMap {
     const who = first !== undefined ? persona(this.trace, first) : null;
     const direct = first !== undefined ? (kids.get(first) ?? []).filter(visible).length : 0;
     this.headEl.innerHTML = who
-      ? `<span><b>${esc(who.name)}</b>, ${who.age} años: ${zero.toLowerCase()}.</span><span>${this.zombie ? (who.female ? 'Ella mordió' : 'Él mordió') : (who.female ? 'Ella contagió' : 'Él contagió')} a <b>${direct}</b> y la cadena llega a <b>${fmt(total)}</b> vecinos el día ${day} (unos ${fmt(total * this.trace.scale)} habitantes).</span>`
+      ? `<span><b>${esc(who.name)}</b>, ${who.age} años: ${zero.toLowerCase()}.</span><span>${chainText(this.zombie, who.female, direct, total, day, total * this.trace.scale)}</span>`
       : '';
     this.tabs.querySelectorAll('[data-tree]').forEach((b) => {
       const t = this.trees[b.dataset.tree];
