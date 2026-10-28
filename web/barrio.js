@@ -24,6 +24,8 @@ const LAYOUTS = {
   trabajo: { work: [1, 1], market: [2, 1], school: [1, 0], plaza: [2, 2] },
   escuela: { school: [1, 1], market: [1, 0], work: [2, 1], plaza: [2, 2] },
 };
+// Foto de cada parroquia de Manta (generada con Higgsfield) para la tarjeta del barrio.
+const ZONE_PHOTO = { Tarqui: 'tarqui', Manta: 'manta', 'Los Esteros': 'esteros', 'San Mateo': 'sanmateo', 'Eloy Alfaro': 'eloy' };
 const STATE_COLOR = ['#5fd38d', '#facc15', '#ff3b3b', '#60a5fa', '#2dd4bf'];
 const SHIRTS = ['#e85d5d', '#4f8fe8', '#f2c94c', '#5bbf8a', '#f4f4f4', '#b07be0', '#f08a3c', '#3fb8c4', '#2f3b52', '#e87fb0'];
 const SKIN = ['#8d5a3b', '#a86b47', '#c68a5e', '#e0ad84'];
@@ -309,7 +311,8 @@ export class Barrio {
     }
     this.hasBus = this.people.some((p) => p.bus);
     this.decor = this.makeDecor();
-    this.nameEl.textContent = `${look.blurb[0].toUpperCase()}${look.blurb.slice(1)}. ${this.houses.length} casas y ${this.people.length} vecinos.`;
+    const photo = ZONE_PHOTO[this.zoneName];
+    this.nameEl.innerHTML = `${photo ? `<img src="img/hf/zona_${photo}.webp" alt="">` : ''}<span>${look.blurb[0].toUpperCase()}${look.blurb.slice(1)}. ${this.houses.length} casas y ${this.people.length} vecinos.</span>`;
     this.countsDay = -1;
     this.captionKey = '';
     this.zoom = 1;
