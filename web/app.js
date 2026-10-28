@@ -127,8 +127,8 @@ $('scenarios').addEventListener('change', (e) => {
 
 function renderLegend() {
   const T = terms();
-  const items = [['#3f7d58', T.S], ['#facc15', `${T.E} (el comité no lo ve)`], ['#ff3b3b', T.I], ['#60a5fa', T.R], ['#2dd4bf', 'Vacunado'], ['#c084fc', 'Hogar en cuarentena']];
-  $('legend').innerHTML = items.map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('') + '<span>Mercado / colegios cerrados y fumigación se anotan en el mapa</span>';
+  const items = [['#5fd38d', T.S], ['#facc15', `${T.E} (el comité no lo ve)`], ['#ff3b3b', T.I], ['#60a5fa', T.R], ['#2dd4bf', 'Vacunado'], ['#c084fc', 'Hogar en cuarentena']];
+  $('legend').innerHTML = items.map(([c, t]) => `<span><i style="--c:${c}"></i>${t}</span>`).join('') + '<span>El rombo sobre cada vecino es su estado ese día</span>';
   $('curveTitle').firstChild.textContent = `${T.active} por día `;
   $('thInfected').textContent = `Personas ${T.bittenM}`;
 }
@@ -278,6 +278,11 @@ async function simulate(surprise = null) {
 
 function render(s, seconds) {
   const T = terms();
+  // Primer resultado: aparecen el plan, el barrio y los detalles.
+  const first = !$('empty').hidden;
+  for (const id of ['summary', 'surprise', 'cityCard', 'curveCard', 'detailsGrid']) $(id).hidden = false;
+  $('empty').hidden = true;
+  if (first) $('summary').scrollIntoView({ behavior: 'smooth', block: 'start' });
   const sc = SCENARIOS[scenario];
   const city = CITIES[s.config.city];
   const where = s.engine === 'aws' ? 'en AWS Lambda' : 'en este navegador';

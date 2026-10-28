@@ -64,8 +64,10 @@ export function persona(trace, i) {
   // Mismo apellido para todo el hogar.
   const surname = SURNAMES[new Rng(hashSeed(trace.seed, 'hogar', p.home[i])).int(SURNAMES.length)];
   const first = (female ? FEMALE : MALE)[rng.int(20)];
-  const avatar = age < 12 ? (female ? '👧' : '👦') : age < 18 ? '🧒' : age < 65 ? (female ? '👩' : '👨') : female ? '👵' : '👴';
-  return { i, name: `${first} ${surname}`, first, female, age, what, avatar };
+  // Iniciales sobre un color propio (estable para cada persona).
+  const initials = `${first[0]}${surname[0]}`;
+  const color = `hsl(${Math.floor(rng.next() * 360)}, 55%, 72%)`;
+  return { i, name: `${first} ${surname}`, first, female, age, what, initials, color };
 }
 
 const a = (who, f, m) => (who.female ? f : m);
@@ -158,7 +160,7 @@ export function renderVecino(el, trace, i, day, theme = 'zombi') {
       const pk = persona(trace, k);
       const d = s.infectedDay[k];
       const where = d === 0 ? 'paciente cero' : `día ${d}, ${PLACE[s.infectedLayer[k]](p, k)}`;
-      return `<li><button type="button" class="link" data-person="${k}">${pk.avatar} ${esc(pk.name)}</button> <small>${esc(where)}</small>${idx === 0 ? ' <b>← aquí</b>' : ''}</li>`;
+      return `<li><button type="button" class="link" data-person="${k}"><span class="mini" style="--c:${pk.color}">${pk.initials}</span>${esc(pk.name)}</button> <small>${esc(where)}</small>${idx === 0 ? ' <b>← aquí</b>' : ''}</li>`;
     }).join('');
     const tail = ch.complete ? '' : '<li><small>… (la cadena sigue)</small></li>';
     chainHtml = `<h4>Cadena de contagio si nadie hace nada <small>(de ${a(who, 'ella', 'él')} hacia el paciente cero)</small></h4><ol class="chain">${rows}${tail}</ol>`;
@@ -167,7 +169,7 @@ export function renderVecino(el, trace, i, day, theme = 'zombi') {
   el.innerHTML = `
     <button type="button" class="close" aria-label="Cerrar">✕</button>
     <div class="vecino-head">
-      <div class="avatar"><span class="plumbob" style="--c:${STATE_COLOR[code] ?? '#4ade80'}" title="Hoy, con el plan: ${STATE_TEXT[theme][code][who.female ? 0 : 1]}"></span>${who.avatar}</div>
+      <div class="avatar" style="--c:${who.color}"><span class="plumbob" style="--p:${STATE_COLOR[code] ?? '#4ade80'}" title="Hoy, con el plan: ${STATE_TEXT[theme][code][who.female ? 0 : 1]}"></span>${who.initials}</div>
       <div>
         <h3>${esc(who.name)} <small>${who.age} años</small></h3>
         <p class="muted">${esc(who.what)} · día ${day}, con el plan: <b style="color:${STATE_COLOR[code]}">${STATE_TEXT[theme][code][who.female ? 0 : 1]}</b></p>

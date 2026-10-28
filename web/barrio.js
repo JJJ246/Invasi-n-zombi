@@ -3,34 +3,34 @@
 // mañana a su colegio, su trabajo (a pie o en bus) o al mercado, y vuelve en la tarde. El rombo sobre
 // la cabeza es su estado ese día. Lo que hace el Comité también se ve: vacunas, hogares en cuarentena,
 // mercado o colegio cerrados, brigadas de fumigación.
-// Las casas y las personas son las de la simulación (las más cercanas entre sí en el mapa real); la
-// calle y los edificios son un dibujo esquemático, no están a escala.
+// Cada zona tiene su propio aspecto (barrios.js). Las casas y las personas son las de la simulación
+// (los hogares más cercanos entre sí en el mapa real); calles y edificios son un dibujo esquemático.
 import { persona } from './vecino.js';
 import { CITIES } from './engine/cities.js';
+import { lookOf } from './barrios.js';
 
-const G = 18; // casillas por lado
-const ROAD = 9; // la calle principal ocupa las filas 8 y 9; su centro es y = 9
+const G = 30; // casillas por lado
+const ROADS = [10, 20]; // centro de las calles (horizontales y verticales), de 2 casillas de ancho
+const SPANS = [[0, 9], [11, 19], [21, 30]]; // manzanas entre calles
 const STATE_COLOR = ['#5fd38d', '#facc15', '#ff3b3b', '#60a5fa', '#2dd4bf'];
-const WALLS = ['#e9b872', '#d98b74', '#8fbcd4', '#a8cf94', '#efe0a8', '#c8a6dc', '#f2a65a', '#e4c1c1'];
-const ROOFS = ['#a4553a', '#8a95a3', '#b8683f', '#6f7f8f'];
 const SHIRTS = ['#e85d5d', '#4f8fe8', '#f2c94c', '#5bbf8a', '#f4f4f4', '#b07be0', '#f08a3c', '#3fb8c4', '#2f3b52', '#e87fb0'];
 const SKIN = ['#8d5a3b', '#a86b47', '#c68a5e', '#e0ad84'];
 const PANTS = ['#2f3b52', '#3c4a63', '#5a4a3a', '#24314a'];
 const ZOMBIE_SKIN = '#93b07c';
+const GROUND = {
+  verde: ['#7aa257', '#739951', '#80a95d'],
+  seco: ['#a9a56b', '#a09c62', '#b2ad74'],
+  tierra: ['#b59a6a', '#ab8f60', '#bca377'],
+  arena: ['#d9c48f', '#d2bc86', '#e0cc98'],
+  urbano: ['#a5a097', '#9d988f', '#aca79e'],
+};
+const WATER = { mar: '#2b7a9c', rio: '#76694a', estero: '#4d6a55' };
+const ROOF = { losa: '#bdb7ad', zinc: '#97a0a8', teja: '#b4643c' };
 const STRATS = [
   ['nada', 'Sin hacer nada'],
   ['azar', 'Al azar'],
   ['adaptativa', 'Plan del Comité'],
 ];
-
-// Lugares del barrio: edificio, patio donde se queda la gente y zona que no puede tener casas.
-const PLACES = {
-  mercado: { label: 'Mercado', area: { x: 10.6, y: 0.6, w: 4.8, h: 5 } },
-  colegio: { label: 'Colegio', box: { x: 0.6, y: 10.6, w: 3.6, h: 2.4, z: 1.15 }, wall: '#f1e7cf', roof: '#3d6fb0', area: { x: 0.6, y: 13.4, w: 4.4, h: 3.2 } },
-  trabajo: { label: 'Atunera', box: { x: 12.6, y: 12.4, w: 4, h: 2.6, z: 1.45 }, wall: '#b9c4cf', roof: '#56657a', area: { x: 12.4, y: 15.2, w: 4.6, h: 2.2 } },
-};
-const STALLS = [[11, 1.2], [13.2, 1.2], [11, 3.6], [13.2, 3.6]];
-const STOP = { x: 15.6, y: 7.55 };
 
 // Número pseudoaleatorio estable en [0, 1) para (a, b): la misma persona hace siempre lo mismo.
 function hash(a, b = 0) {
@@ -41,26 +41,68 @@ function hash(a, b = 0) {
 }
 const pick = (list, r) => list[Math.floor(r * list.length) % list.length];
 
-function shade(hex, k) {
-  const n = parseInt(hex.slice(1), 16);
+function shade(color, k) {
+  const n = parseInt(color.slice(1), 16);
   const f = (c) => Math.max(0, Math.min(255, Math.round(k < 0 ? c * (1 + k) : c + (255 - c) * k)));
   return `rgb(${f(n >> 16)}, ${f((n >> 8) & 255)}, ${f(n & 255)})`;
 }
+const block = (bi, bj) => ({ x0: SPANS[bi][0], x1: SPANS[bi][1], y0: SPANS[bj][0], y1: SPANS[bj][1] });
+const nearestRoad = (v) => (Math.abs(v - ROADS[0]) <= Math.abs(v - ROADS[1]) ? ROADS[0] : ROADS[1]);
 
-// Casillas para casas: en filas frente a la calle, sin pisar el mercado, el colegio ni la atunera.
-function houseSlots() {
-  const blocked = Object.values(PLACES).flatMap((p) => [p.area, p.box].filter(Boolean));
-  const free = (x, y) => !blocked.some((b) => x < b.x + b.w + 0.3 && x + 1.3 > b.x && y < b.y + b.h + 0.3 && y + 2.2 > b.y);
+// Plano del barrio según su aspecto. El agua (mar, río o estero) ocupa la esquina izquierda: todo lo
+// que cumple y − x > T. En pantalla es una franja a la izquierda, siempre a la vista.
+const T = 11;
+function planFor(look) {
+  const water = !!look.water;
+  const shore = water ? T - (look.beach ? 1.6 : 0.8) : Infinity; // más allá: playa o malecón, luego agua
+  const landX = (y) => Math.max(0, y - shore); // primer x en tierra firme para esa fila
+  // El mercado en el centro (ahí empieza el brote de la demo); el trabajo, el colegio y la plaza alrededor.
+  const blocks = { plaza: [2, 2], market: [1, 1], school: [1, 0], work: [2, 1] };
+  // Con agua, la plaza se cambia por más casas: el agua ya ocupa una esquina del barrio.
+  const used = new Set(Object.entries(blocks).filter(([k]) => !(water && k === 'plaza')).map(([, [i, j]]) => `${i},${j}`));
   const slots = [];
-  for (const bx of [0, 10]) {
-    for (const ys of [[0.6, 3.1, 5.6], [10.6, 13, 15.4]]) {
-      for (const y of ys) for (let k = 0; k < 4; k++) if (free(bx + 0.6 + 2 * k, y)) slots.push({ x: bx + 0.6 + 2 * k, y });
+  for (let bi = 0; bi < 3; bi++) {
+    for (let bj = 0; bj < 3; bj++) {
+      if (used.has(`${bi},${bj}`)) continue;
+      const r = block(bi, bj);
+      for (let y = r.y0 + 0.4; y + 2.2 <= r.y1 + 0.05; y += 2.75) {
+        for (let x = r.x0 + 0.5; x + 1 <= r.x1 - 0.3; x += 2) if (y + 2.2 - x < shore - 0.2) slots.push({ x, y });
+      }
     }
   }
-  // Primero las más cerca del centro del barrio.
-  return slots.sort((a, b) => Math.hypot(a.x - 8.5, a.y - 8.5) - Math.hypot(b.x - 8.5, b.y - 8.5));
+  // Casas sobre el agua (palafitos), cerca de la orilla, con su pasarela.
+  if (look.palafitos) {
+    for (let y = 0.4; y + 2.2 <= G; y += 2.75) {
+      for (let x = 0.5; x + 1 <= G; x += 2) {
+        const near = y - (x + 1) > T + 0.4 && y + 2.2 - x < T + 4.2;
+        if (near && hash(Math.round(x * 10), Math.round(y * 10) + 77) < look.palafitos) slots.push({ x, y, stilts: true });
+      }
+    }
+  }
+  const c = G / 2;
+  slots.sort((a, b) => Math.hypot(a.x + 0.5 - c, a.y + 0.5 - c) - Math.hypot(b.x + 0.5 - c, b.y + 0.5 - c));
+  return { water, shore, landX, blocks, slots };
 }
-const SLOTS = houseSlots();
+
+// Lugares: edificio (caja), patio donde se queda la gente y adornos según el tipo.
+function placesFor(look, plan) {
+  const at = (key) => block(...plan.blocks[key]);
+  const s = at('school');
+  const m = at('market');
+  const w = at('work');
+  const wx = w.x0 + 0.6;
+  const kind = look.work.kind;
+  const tall = { oficinas: 4.6, atunera: 1.7, astillero: 1.6, laboratorio: 0.75, bodegas: 1.3, puerto: 1.2, mall: 1.5, fabrica: 1.5, taller: 0.95 }[kind] ?? 1.3;
+  const wall = { oficinas: '#9fb7c9', atunera: '#c9d1d8', astillero: '#b9a88e', laboratorio: '#e8eef0', bodegas: '#c5c0b4', puerto: '#b9c4cf', mall: '#e9e4da', fabrica: '#b9c4cf', taller: '#c9b9a0' }[kind] ?? '#b9c4cf';
+  const roof = { oficinas: '#6f8ea8', atunera: '#7f8c99', astillero: '#8a95a3', laboratorio: '#5d8aa8', bodegas: '#8f979f', puerto: '#56657a', mall: '#c0473d', fabrica: '#56657a', taller: '#97a0a8' }[kind] ?? '#56657a';
+  const bw = Math.min(kind === 'oficinas' ? 3 : 4.6, w.x1 - 0.4 - wx);
+  return {
+    school: { label: look.school, box: { x: s.x0 + 0.6, y: s.y0 + 0.6, w: 4.4, h: 2.6, z: 1.25 }, wall: '#f1e7cf', roof: '#3d6fb0', area: { x: s.x0 + 0.6, y: s.y0 + 3.8, w: 6.8, h: 3.6 } },
+    market: { label: look.market, area: { x: m.x0 + 0.6, y: m.y0 + 0.6, w: 7.2, h: 7 } },
+    work: { label: look.work.label, kind, box: { x: wx, y: w.y0 + 0.6, w: bw, h: kind === 'bodegas' ? 1.5 : 3, z: tall }, wall, roof, area: { x: wx, y: w.y0 + 4.2, w: Math.min(6.6, w.x1 - 0.4 - wx), h: 3.4 } },
+    plaza: at('plaza'),
+  };
+}
 
 export class Barrio {
   constructor(root, player) {
@@ -72,32 +114,53 @@ export class Barrio {
     this.clockEl = root.querySelector('.barrio-clock');
     this.nameEl = root.querySelector('.barrio-name');
     this.captionEl = root.querySelector('.barrio-caption');
+    this.zoneEl = root.querySelector('.barrio-zone');
     this.strategy = 'adaptativa';
     this.active = true;
     this.trace = null;
     this.hits = [];
     this.mouse = null;
     this.countsDay = -1;
+    this.zoom = 1;
+    this.center = [G / 2, G / 2];
     this.stratsEl.addEventListener('click', (e) => {
       const b = e.target.closest('[data-strategy]');
       if (!b) return;
       this.strategy = b.dataset.strategy;
       this.countsDay = -1;
+      this.captionKey = '';
     });
-    root.querySelector('.barrio-next').addEventListener('click', () => this.nextBarrio());
-    this.canvas.addEventListener('click', (e) => {
-      const i = this.hitAt(e);
-      if (i >= 0) this.player.select(i);
+    this.zoneEl.addEventListener('change', () => this.showZone(Number(this.zoneEl.value)));
+    root.querySelectorAll('[data-zoom]').forEach((b) => b.addEventListener('click', () => this.setZoom(this.zoom * (b.dataset.zoom === '+' ? 1.25 : 0.8))));
+    // Arrastrar para mover la cámara; tocar a alguien para conocerlo.
+    let drag = null;
+    this.canvas.addEventListener('pointerdown', (e) => {
+      drag = { x: e.clientX, y: e.clientY, center: [...this.center], moved: false };
+      this.canvas.setPointerCapture(e.pointerId);
     });
-    this.canvas.addEventListener('mousemove', (e) => {
+    this.canvas.addEventListener('pointermove', (e) => {
       const r = this.canvas.getBoundingClientRect();
       this.mouse = [(e.clientX - r.left) * this.dpr, (e.clientY - r.top) * this.dpr];
-      this.canvas.style.cursor = this.hitAt(e) >= 0 ? 'pointer' : 'default';
+      if (drag) {
+        const dx = ((e.clientX - drag.x) * this.dpr * 2) / this.tw;
+        const dy = ((e.clientY - drag.y) * this.dpr * 4) / this.tw;
+        if (Math.abs(dx) + Math.abs(dy) > 0.15) drag.moved = true;
+        // Pantalla → casillas: x − y cambia con el arrastre horizontal, x + y con el vertical.
+        this.setCenter(drag.center[0] - (dx + dy) / 2, drag.center[1] - (dy - dx) / 2);
+      }
+      this.canvas.style.cursor = drag?.moved ? 'grabbing' : this.hitAt(e) >= 0 ? 'pointer' : 'grab';
     });
-    this.canvas.addEventListener('mouseleave', () => (this.mouse = null));
+    this.canvas.addEventListener('pointerup', (e) => {
+      if (drag && !drag.moved) {
+        const i = this.hitAt(e);
+        if (i >= 0) this.player.select(i);
+      }
+      drag = null;
+    });
+    this.canvas.addEventListener('pointerleave', () => (this.mouse = null));
     new ResizeObserver(() => this.resize()).observe(this.canvas);
     const loop = () => {
-      if (this.active && this.trace && !document.hidden) this.draw();
+      if (this.active && this.trace && this.houses && !document.hidden) this.draw();
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -105,43 +168,44 @@ export class Barrio {
 
   load(trace, cfg, theme, terms) {
     this.trace = trace;
-    this.theme = theme;
     this.terms = terms;
     this.zombie = theme === 'zombi';
     this.closeDays = cfg.closeDays;
     this.fumigationDays = cfg.fumigationDays;
     this.zones = CITIES[trace.city].zones;
+    this.zoneEl.innerHTML = this.zones.map((z, k) => `<option value="${k}">${z}</option>`).join('');
     this.indexHomes();
     this.centers = this.rankCenters();
-    this.centerIdx = 0;
     this.build(this.centers[0]);
   }
 
   setActive(on) {
     this.active = on;
-    this.player.rate = on ? 1 / 15 : 1; // en el barrio un día dura más: se ve la rutina
+    // En el barrio un día dura mucho más que en los mapas: se ve la mañana, la tarde y la noche.
+    this.player.rate = on ? 1 / 40 : 1;
   }
 
-  // Hogares con su posición en el mapa real y sus integrantes.
+  // Hogares con su posición en el mapa real, su zona y sus integrantes.
   indexHomes() {
     const t = this.trace;
     const map = new Map();
     for (let i = 0; i < t.N; i++) {
       const h = t.people.home[i];
-      if (!map.has(h)) map.set(h, { h, x: t.layout.x[i] * t.layout.aspect, y: t.layout.y[i], members: [] });
+      if (!map.has(h)) map.set(h, { h, x: t.layout.x[i] * t.layout.aspect, y: t.layout.y[i], zone: t.people.parroquia[i], members: [] });
       map.get(h).members.push(i);
     }
     this.homes = [...map.values()];
     this.homeIndex = map;
   }
 
-  nearestHomes(cx, cy, k) {
-    const d = this.homes.map((h) => (h.x - cx) ** 2 + (h.y - cy) ** 2);
-    return Array.from(d.keys()).sort((a, b) => d[a] - d[b]).slice(0, k).map((j) => this.homes[j]);
+  nearestHomes(cx, cy, k, zone = -1) {
+    const pool = zone >= 0 ? this.homes.filter((h) => h.zone === zone) : this.homes;
+    const d = pool.map((h) => (h.x - cx) ** 2 + (h.y - cy) ** 2);
+    return Array.from(d.keys()).sort((a, b) => d[a] - d[b]).slice(0, k).map((j) => pool[j]);
   }
 
   // Barrios con historia: muchos mordidos si nadie hace nada, muchos salvados por el plan y algo de
-  // trabajo del Comité (vacunas) para ver.
+  // trabajo del Comité (vacunas) para ver. Se guarda el mejor de cada zona.
   rankCenters() {
     const t = this.trace;
     const n = t.nada.story;
@@ -151,20 +215,18 @@ export class Barrio {
     const list = [];
     for (let k = 0; k < this.homes.length; k += step) {
       const h = this.homes[k];
-      const near = this.nearestHomes(h.x, h.y, SLOTS.length);
+      const near = this.nearestHomes(h.x, h.y, 60);
       list.push({ home: h, score: near.reduce((s, x) => s + score(x), 0) });
     }
     list.sort((a, b) => b.score - a.score);
-    // Que los siguientes barrios no sean casi el mismo.
-    const out = [];
-    for (const x of list) if (out.every((o) => Math.hypot(o.home.x - x.home.x, o.home.y - x.home.y) > 0.06)) out.push(x);
-    return out.map((x) => x.home);
+    this.bestByZone = new Map();
+    for (const x of list) if (!this.bestByZone.has(x.home.zone)) this.bestByZone.set(x.home.zone, x.home);
+    return list.map((x) => x.home);
   }
 
-  nextBarrio() {
-    if (!this.centers?.length) return;
-    this.centerIdx = (this.centerIdx + 1) % this.centers.length;
-    this.build(this.centers[this.centerIdx]);
+  showZone(zone) {
+    const home = this.bestByZone.get(zone) ?? this.homes.find((h) => h.zone === zone);
+    if (home) this.build(home);
   }
 
   // Si eligen a alguien que no vive en este barrio, se muestra el suyo.
@@ -176,22 +238,34 @@ export class Barrio {
   build(center) {
     const t = this.trace;
     const P = t.people;
-    const homes = this.nearestHomes(center.x, center.y, SLOTS.length);
+    this.zone = center.zone;
+    this.zoneName = this.zones[this.zone];
+    this.zoneEl.value = String(this.zone);
+    const look = lookOf(t.city, this.zoneName);
+    this.look = look;
+    this.plan = planFor(look);
+    this.places = placesFor(look, this.plan);
+    // Los hogares de la misma zona más cercanos a este; el del centro, en el centro del barrio.
+    const homes = this.nearestHomes(center.x, center.y, this.plan.slots.length, this.zone);
+    const [s0, s1] = look.houses.stories;
     this.houses = homes.map((h, k) => {
-      const s = SLOTS[k];
-      const r = hash(h.h, 7);
-      return { ...s, home: h.h, members: h.members, wall: pick(WALLS, r), roof: pick(ROOFS, hash(h.h, 8)), skin: pick(SKIN, hash(h.h, 9)) };
+      const s = this.plan.slots[k];
+      const r = (n) => hash(h.h, n);
+      const stories = s.stilts ? 1 : s0 + Math.floor(r(1) * (s1 - s0 + 1));
+      const roof = s.stilts ? 'zinc' : pick(look.houses.roofs, r(2));
+      return { ...s, home: h.h, members: h.members, stories, z: 0.62 + 0.5 * (stories - 1), roof, roofColor: roof === 'teja' ? shade(ROOF.teja, (r(3) - 0.5) * 0.3) : ROOF[roof], wall: pick(look.houses.colors, r(4)), cana: r(5) < (look.houses.cana ?? 0), tank: roof === 'losa' && r(6) < 0.55, skin: pick(SKIN, r(7)) };
     });
     this.people = [];
     this.byPerson = new Map();
-    const zoneCount = new Map();
+    const pl = this.places;
+    this.stop = { x: 6, y: ROADS[0] - 1.35 };
     for (const [hk, house] of this.houses.entries()) {
       house.members.forEach((i, k) => {
         const who = persona(t, i);
-        const scale = who.age < 12 ? 0.72 : who.age < 18 ? 0.86 : 1;
         const r = (n) => hash(i, n);
         const p = {
-          i, house: hk, who, scale,
+          i, house: hk, who,
+          scale: who.age < 12 ? 0.72 : who.age < 18 ? 0.86 : 1,
           role: P.role[i],
           bus: P.role[i] === 2 && P.bus[i] >= 0,
           yard: { x: house.x + 0.2 + (k % 3) * 0.32, y: house.y + 1.25 + Math.floor(k / 3) * 0.3 },
@@ -200,35 +274,144 @@ export class Barrio {
           j1: r(4), j2: r(5), j3: r(6),
         };
         const spot = (a) => ({ x: a.x + 0.3 + r(10) * (a.w - 0.6), y: a.y + 0.3 + r(11) * (a.h - 0.6) });
-        p.dest = p.role === 1 ? spot(PLACES.colegio.area) : p.role === 2 ? (p.bus ? { x: STOP.x - 0.6 + r(12) * 1.4, y: STOP.y + 0.05 } : spot(PLACES.trabajo.area)) : spot(PLACES.mercado.area);
+        p.dest = p.role === 1 ? spot(pl.school.area) : p.role === 2 ? (p.bus ? { x: this.stop.x - 0.8 + r(12) * 1.6, y: this.stop.y + 0.1 } : spot(pl.work.area)) : spot(pl.market.area);
+        p.route = this.route(p.yard, p.dest);
         this.byPerson.set(i, p);
         this.people.push(p);
-        zoneCount.set(P.parroquia[i], (zoneCount.get(P.parroquia[i]) ?? 0) + 1);
       });
     }
-    this.zone = [...zoneCount].sort((a, b) => b[1] - a[1])[0][0];
-    this.zoneName = this.zones[this.zone];
     this.hasBus = this.people.some((p) => p.bus);
-    // Palmeras en las casillas que sobran.
-    this.trees = SLOTS.slice(this.houses.length).map((s) => ({ x: s.x + 0.5, y: s.y + 0.6 }));
-    this.nameEl.textContent = `Un barrio de ${this.zoneName} · ${this.houses.length} casas · ${this.people.length} vecinos`;
+    this.decor = this.makeDecor();
+    this.nameEl.textContent = `${look.blurb[0].toUpperCase()}${look.blurb.slice(1)} · ${this.houses.length} casas · ${this.people.length} vecinos`;
     this.countsDay = -1;
+    this.captionKey = '';
+    this.zoom = 1;
+    this.center = [G / 2, G / 2];
     this.resize();
   }
 
+  // Camino por las calles: de la casa a la calle más cercana, por la calle y, si hace falta, cruzando.
+  route(a, b) {
+    const ya = nearestRoad(a.y);
+    const yb = nearestRoad(b.y);
+    const dir = b.x >= a.x ? 1 : -1;
+    const off = dir > 0 ? -0.4 : 0.4;
+    const lx = (y) => this.plan.landX(y) + 0.3;
+    const pts = [a, { x: Math.max(a.x, lx(ya)), y: ya + off }];
+    if (ya !== yb) {
+      const vx = nearestRoad((a.x + b.x) / 2) + (yb > ya ? 0.4 : -0.4);
+      pts.push({ x: vx, y: ya + off }, { x: vx, y: yb + off });
+    }
+    pts.push({ x: Math.max(b.x, lx(yb)), y: yb + off }, b);
+    const seg = pts.slice(1).map((q, k) => Math.hypot(q.x - pts[k].x, q.y - pts[k].y));
+    const len = seg.reduce((s, x) => s + x, 0);
+    return { pts, seg, len, travel: Math.min(0.09, Math.max(0.035, len * 0.0035)) };
+  }
+
+  along(rt, f, back) {
+    let d = (back ? 1 - f : f) * rt.len;
+    const { pts, seg } = rt;
+    for (let k = 0; k < seg.length; k++) {
+      if (d <= seg[k] || k === seg.length - 1) {
+        const u = seg[k] ? Math.min(1, d / seg[k]) : 1;
+        const a = pts[k];
+        const b = pts[k + 1];
+        const dir = Math.sign((b.x - a.x) - (b.y - a.y)) * (back ? -1 : 1) || 1;
+        return { x: a.x + (b.x - a.x) * u, y: a.y + (b.y - a.y) * u, walking: true, dir };
+      }
+      d -= seg[k];
+    }
+  }
+
+  // Adornos fijos: árboles, botes, autos, iglesia. Estables para cada barrio.
+  makeDecor() {
+    const look = this.look;
+    const plan = this.plan;
+    const out = [];
+    const tree = look.trees.kind;
+    const z = this.zone * 101;
+    for (const c of ROADS) {
+      for (let x = plan.landX(c) + 0.8; x < G - 0.5; x += 1.6) {
+        if (Math.abs(x - 10) < 1.6 || Math.abs(x - 20) < 1.6) continue;
+        if (hash(Math.round(x * 10) + z, c) < look.trees.amount * 0.7) out.push({ type: tree, x, y: c - 1.45 });
+      }
+    }
+    for (const s of plan.slots.slice(this.houses.length)) if (!s.stilts) out.push({ type: tree, x: s.x + 0.5, y: s.y + 0.7 });
+    const p = this.places.plaza;
+    if (look.water) {
+      // (sin plaza: ese espacio es de casas)
+    } else if (look.plaza === 'parque') {
+      for (let k = 0; k < 9; k++) out.push({ type: tree, x: p.x0 + 1 + (k % 3) * 3, y: p.y0 + 1 + Math.floor(k / 3) * 3 });
+    } else if (look.plaza === 'iglesia') {
+      out.push({ type: 'iglesia', x: p.x0 + 1.4, y: p.y0 + 0.8 });
+      for (let k = 0; k < 4; k++) out.push({ type: tree, x: p.x0 + 1 + k * 2, y: p.y0 + 6.8 });
+    } else {
+      out.push({ type: tree, x: p.x0 + 0.6, y: p.y0 + 0.6 }, { type: tree, x: p.x1 - 0.6, y: p.y0 + 0.6 });
+    }
+    if (look.water) {
+      // Botes en el agua (y − x > T + 1) y, en las playas de pescadores, algunos varados en la arena.
+      const n = look.boats === 'atuneros' ? 3 : look.boats ? 7 : 0;
+      for (let k = 0; k < n; k++) {
+        const big = look.boats === 'atuneros';
+        const y = T + 3 + ((k + hash(k, z + 4)) / n) * (G - T - 4);
+        const x = 0.3 + hash(k, z + 3) * Math.max(0.5, y - T - (big ? 3.4 : 2.4));
+        out.push({ type: 'bote', big, yate: look.boats === 'yates', x, y: y - (big ? 2.2 : 1.1), color: pick(['#2f6fb5', '#e85d5d', '#f4f4f4', '#2a9d8f', '#f2c94c'], hash(k, z + 5)) });
+      }
+      if (look.beach && look.boats === 'pesca') {
+        for (let k = 0; k < 4; k++) {
+          const y = 12 + k * 4.5;
+          out.push({ type: 'bote', x: y - T + 0.5, y: y - 1.1, color: pick(['#2f6fb5', '#e85d5d', '#2a9d8f'], hash(k, z + 6)), beached: true });
+        }
+      }
+    }
+    for (let k = 0; k < 6; k++) {
+      const c = ROADS[k % 2];
+      out.push({ type: 'auto', x: plan.landX(c) + 2 + hash(k, z + 8) * (G - plan.landX(c) - 4), y: c + 0.62, color: pick(['#e85d5d', '#f4f4f4', '#2f3b52', '#4f8fe8', '#f2c94c'], hash(k, z + 9)) });
+    }
+    return out;
+  }
+
+  // ---------- Cámara ----------
   resize() {
     const dpr = window.devicePixelRatio || 1;
     const w = Math.max(300, Math.round(this.canvas.clientWidth * dpr));
-    const h = Math.round(w * 0.56);
+    const h = Math.max(200, Math.round(this.canvas.clientHeight * dpr));
     if (this.canvas.width !== w || this.canvas.height !== h) {
       this.canvas.width = w;
       this.canvas.height = h;
     }
     this.dpr = dpr;
-    this.tw = Math.min(w / 18.8, h / 10.2); // ancho de una casilla en pantalla
-    this.ox = w / 2;
-    this.oy = (h - 9 * this.tw) / 2 + 0.55 * this.tw;
-    if (this.trace) this.ground = this.drawGround(w, h);
+    this.setZoom(this.zoom);
+  }
+
+  // Con zoom 1 el barrio llena justo la vista; nunca se ve el borde del tablero.
+  setZoom(z) {
+    const { width: W, height: H } = this.canvas;
+    this.zoom = Math.max(1, Math.min(2.6, z));
+    this.tw = ((2 * H + W) / (G - 0.6)) * this.zoom;
+    this.setCenter(...this.center);
+  }
+
+  setCenter(cx, cy) {
+    const { width: W, height: H } = this.canvas;
+    const fits = (x, y) => {
+      for (const [sx, sy] of [[-W / 2, -H / 2], [W / 2, -H / 2], [-W / 2, H / 2], [W / 2, H / 2]]) {
+        const a = (sx * 2) / this.tw + x - y;
+        const b = (sy * 4) / this.tw + x + y;
+        const gx = (a + b) / 2;
+        const gy = (b - a) / 2;
+        if (gx < -0.2 || gy < -0.2 || gx > G + 0.2 || gy > G + 0.2) return false;
+      }
+      return true;
+    };
+    let [x, y] = [cx, cy];
+    // Si se sale del tablero, se acerca al centro hasta que entre.
+    for (let k = 0; k < 30 && !fits(x, y); k++) [x, y] = [x + (G / 2 - x) * 0.25, y + (G / 2 - y) * 0.25];
+    if (!fits(x, y)) [x, y] = [G / 2, G / 2];
+    this.center = [x, y];
+    this.ox = W / 2 - ((x - y) * this.tw) / 2;
+    this.oy = H / 2 - ((x + y) * this.tw) / 4;
+    this.groundAt = null;
   }
 
   // Casilla (x, y) a la altura z → píxel en pantalla.
@@ -236,148 +419,293 @@ export class Barrio {
     return [this.ox + ((x - y) * this.tw) / 2, this.oy + ((x + y) * this.tw) / 4 - (z * this.tw) / 2];
   }
 
-  poly(ctx, pts, fill, stroke) {
+  poly(ctx, pts, fill) {
     ctx.beginPath();
     pts.forEach(([x, y], k) => (k ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
     ctx.closePath();
     ctx.fillStyle = fill;
     ctx.fill();
-    if (stroke) {
-      ctx.strokeStyle = stroke;
-      ctx.stroke();
-    }
   }
 
-  rect(ctx, x, y, w, h, fill) {
-    this.poly(ctx, [this.P(x, y), this.P(x + w, y), this.P(x + w, y + h), this.P(x, y + h)], fill);
+  rect(ctx, x, y, w, h, fill, z = 0) {
+    this.poly(ctx, [this.P(x, y, z), this.P(x + w, y, z), this.P(x + w, y + h, z), this.P(x, y + h, z)], fill);
   }
 
-  // El suelo no cambia: se dibuja una vez (pasto, calles, veredas, patios).
-  drawGround(w, h) {
-    const bg = document.createElement('canvas');
+  line(ctx, a, b, color, width) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    ctx.moveTo(...a);
+    ctx.lineTo(...b);
+    ctx.stroke();
+  }
+
+  // El suelo solo cambia al mover la cámara: se dibuja aparte y se reutiliza.
+  drawGround() {
+    const { width: w, height: h } = this.canvas;
+    const bg = this.groundCanvas ?? document.createElement('canvas');
     bg.width = w;
     bg.height = h;
     const ctx = bg.getContext('2d');
-    const sky = ctx.createLinearGradient(0, 0, 0, h);
-    sky.addColorStop(0, '#16202b');
-    sky.addColorStop(1, '#0c1117');
-    ctx.fillStyle = sky;
+    const look = this.look;
+    const { landX } = this.plan;
+    const tw = this.tw;
+    ctx.fillStyle = '#0c0a12';
     ctx.fillRect(0, 0, w, h);
-    // Base de tierra (el "tablero" del juego).
-    this.poly(ctx, [this.P(0, G), this.P(G, G), this.P(G, G, -0.5), this.P(0, G, -0.5)], '#5b4630');
-    this.poly(ctx, [this.P(G, 0), this.P(G, G), this.P(G, G, -0.5), this.P(G, 0, -0.5)], '#47361f');
+    const tones = GROUND[look.ground];
     for (let x = 0; x < G; x++) {
       for (let y = 0; y < G; y++) {
+        const [sx, sy] = this.P(x + 0.5, y + 0.5);
+        if (sx < -tw || sx > w + tw || sy < -tw || sy > h + tw) continue;
         const r = hash(x * 31 + y, 3);
-        this.rect(ctx, x, y, 1, 1, r < 0.5 ? '#7aa257' : r < 0.85 ? '#739951' : '#80a95d');
+        this.rect(ctx, x, y, 1.02, 1.02, pick(tones, r));
       }
     }
-    // Veredas y calles: una horizontal (filas 8–9) y una vertical (columnas 8–9).
-    this.rect(ctx, 0, 7.75, G, 2.5, '#bdb6a6');
-    this.rect(ctx, 7.75, 0, 2.5, G, '#bdb6a6');
-    this.rect(ctx, 0, 8, G, 2, '#4b5059');
-    this.rect(ctx, 8, 0, 2, G, '#4b5059');
-    ctx.lineWidth = Math.max(1, this.tw * 0.04);
-    ctx.strokeStyle = '#e8d27a';
-    ctx.setLineDash([this.tw * 0.25, this.tw * 0.25]);
-    for (const [a, b] of [[[0, ROAD], [8, ROAD]], [[10, ROAD], [G, ROAD]], [[9, 0], [9, 8]], [[9, 10], [9, G]]]) {
-      ctx.beginPath();
-      ctx.moveTo(...this.P(...a));
-      ctx.lineTo(...this.P(...b));
-      ctx.stroke();
+    // Calles: asfalto con línea amarilla o tierra con huellas.
+    const dirt = look.road === 'tierra';
+    const roadColor = dirt ? '#a2865c' : '#4b5059';
+    for (const c of ROADS) {
+      if (!dirt) {
+        this.rect(ctx, landX(c), c - 1.3, G - landX(c), 2.6, '#bdb6a6');
+        this.rect(ctx, c - 1.3, 0, 2.6, G, '#bdb6a6');
+      }
+    }
+    for (const c of ROADS) {
+      this.rect(ctx, landX(c), c - 1, G - landX(c), 2, roadColor);
+      this.rect(ctx, c - 1, 0, 2, G, roadColor);
+    }
+    ctx.setLineDash(dirt ? [] : [tw * 0.25, tw * 0.25]);
+    for (const c of ROADS) {
+      if (dirt) {
+        for (const o of [-0.45, 0.45]) {
+          this.line(ctx, this.P(landX(c), c + o), this.P(G, c + o), 'rgba(90, 70, 40, 0.35)', tw * 0.06);
+          this.line(ctx, this.P(c + o, 0), this.P(c + o, G), 'rgba(90, 70, 40, 0.35)', tw * 0.06);
+        }
+      } else {
+        this.line(ctx, this.P(landX(c), c), this.P(G, c), '#e8d27a', Math.max(1, tw * 0.035));
+        this.line(ctx, this.P(c, 0), this.P(c, G), '#e8d27a', Math.max(1, tw * 0.035));
+      }
     }
     ctx.setLineDash([]);
-    // Cruce peatonal.
-    for (let k = 0; k < 4; k++) this.rect(ctx, 10.15, 8.15 + k * 0.45, 0.6, 0.25, '#e8e4da');
-    // Patios del colegio, la atunera y el piso del mercado.
-    this.rect(ctx, PLACES.colegio.area.x, PLACES.colegio.area.y, PLACES.colegio.area.w, PLACES.colegio.area.h, '#c9b48a');
-    this.rect(ctx, PLACES.trabajo.area.x, PLACES.trabajo.area.y, PLACES.trabajo.area.w, PLACES.trabajo.area.h, '#a9a49a');
-    const m = PLACES.mercado.area;
-    this.rect(ctx, m.x, m.y, m.w, m.h, '#c7b79a');
-    // Caminitos de cada casa a la vereda.
-    for (const hs of this.houses ?? []) {
-      const toRoad = hs.y < ROAD ? 7.75 - (hs.y + 1) : 0;
-      if (toRoad > 0) this.rect(ctx, hs.x + 0.38, hs.y + 1, 0.24, toRoad, '#cdbf9f');
-      this.rect(ctx, hs.x - 0.1, hs.y + 1.05, 1.2, 0.75, '#86ad60');
-    }
-    // Cancha del colegio.
-    const c = PLACES.colegio.area;
+    if (!dirt) for (const c of ROADS) for (let k = 0; k < 4; k++) this.rect(ctx, c + 1.15, c - 0.85 + k * 0.45, 0.6, 0.25, '#e8e4da');
+    // Lugares.
+    const pl = this.places;
+    const sa = pl.school.area;
+    this.rect(ctx, sa.x, sa.y, sa.w, sa.h, '#c9b48a');
     ctx.strokeStyle = '#f4efe2';
-    ctx.lineWidth = Math.max(1, this.tw * 0.03);
-    this.poly(ctx, [this.P(c.x + 0.4, c.y + 0.4), this.P(c.x + c.w - 0.4, c.y + 0.4), this.P(c.x + c.w - 0.4, c.y + c.h - 0.4), this.P(c.x + 0.4, c.y + c.h - 0.4)], 'rgba(0,0,0,0)', '#f4efe2');
-    return bg;
+    ctx.lineWidth = Math.max(1, tw * 0.03);
+    ctx.beginPath();
+    [[sa.x + 0.4, sa.y + 0.4], [sa.x + sa.w - 0.4, sa.y + 0.4], [sa.x + sa.w - 0.4, sa.y + sa.h - 0.4], [sa.x + 0.4, sa.y + sa.h - 0.4]].forEach(([x, y], k) => (k ? ctx.lineTo(...this.P(x, y)) : ctx.moveTo(...this.P(x, y))));
+    ctx.closePath();
+    ctx.stroke();
+    const wa = pl.work.area;
+    this.rect(ctx, wa.x, wa.y, wa.w, wa.h, '#a9a49a');
+    if (pl.work.kind === 'laboratorio') for (let k = 0; k < 3; k++) this.rect(ctx, wa.x + 0.3 + k * 2.1, wa.y + 0.4, 1.7, 1.4, '#4f9cc0');
+    const ma = pl.market.area;
+    this.rect(ctx, ma.x, ma.y, ma.w, ma.h, '#c7b79a');
+    const p = pl.plaza;
+    if (look.water) {
+      // Sin plaza: ahí hay casas.
+    } else if (look.plaza === 'cancha') {
+      this.rect(ctx, p.x0 + 0.5, p.y0 + 0.5, p.x1 - p.x0 - 1, p.y1 - p.y0 - 1, '#b8a06a');
+      this.rect(ctx, p.x0 + 1.2, p.y0 + 1.2, p.x1 - p.x0 - 2.4, p.y1 - p.y0 - 2.4, '#6f9a4f');
+      this.line(ctx, this.P(p.x0 + 1.2, (p.y0 + p.y1) / 2), this.P(p.x1 - 1.2, (p.y0 + p.y1) / 2), '#f4efe2', Math.max(1, tw * 0.03));
+    } else if (look.plaza === 'iglesia') {
+      this.rect(ctx, p.x0 + 0.4, p.y0 + 0.4, p.x1 - p.x0 - 0.8, p.y1 - p.y0 - 0.8, '#d8cfb8');
+    } else {
+      this.rect(ctx, p.x0 + 0.4, p.y0 + 0.4, p.x1 - p.x0 - 0.8, p.y1 - p.y0 - 0.8, '#6f9a4f');
+      this.rect(ctx, (p.x0 + p.x1) / 2 - 0.3, p.y0 + 0.4, 0.6, p.y1 - p.y0 - 0.8, '#d8cfb8');
+      this.rect(ctx, p.x0 + 0.4, (p.y0 + p.y1) / 2 - 0.3, p.x1 - p.x0 - 0.8, 0.6, '#d8cfb8');
+    }
+    for (const hs of this.houses) if (!hs.stilts) this.rect(ctx, hs.x - 0.1, hs.y + 1.05, 1.2, 0.8, shade(tones[0], 0.12));
+    if (look.water) {
+      // Orilla (playa o malecón) y agua, como franjas en diagonal; tapan el final de las calles.
+      const T2 = this.plan.shore;
+      this.poly(ctx, [this.P(0, T2), this.P(G - T2, G), this.P(0, G)], look.beach ? '#dcc795' : '#cfc6b4');
+      this.poly(ctx, [this.P(0, T), this.P(G - T, G), this.P(0, G)], WATER[look.water]);
+      this.line(ctx, this.P(0, T), this.P(G - T, G), 'rgba(255, 255, 255, 0.4)', Math.max(1.5, tw * 0.05));
+      // Pasarelas de los palafitos hasta la orilla.
+      for (const hs of this.houses) {
+        if (!hs.stilts) continue;
+        const toShore = hs.y + 1.2 - T2 - hs.x - 0.5;
+        this.rect(ctx, hs.x + 0.5, hs.y + 1.05, Math.max(0.5, toShore), 0.32, '#8a6a45');
+      }
+    }
+    this.groundCanvas = bg;
+    this.groundAt = `${this.ox},${this.oy},${this.tw},${w},${h}`;
   }
 
-  // Caja isométrica (casa, edificio, puesto, bus) con techo a cuatro aguas o plano.
-  box(ctx, { x, y, w, h, z }, wall, roof, roofType = 'hip') {
+  // ---------- Dibujos ----------
+  // Caja isométrica con techo a cuatro aguas (teja), plano (losa) o de una caída (zinc).
+  box(ctx, { x, y, w, h, z }, wall, roofColor, roofType = 'losa', base = 0) {
     const P = (a, b, c) => this.P(a, b, c);
-    this.poly(ctx, [P(x + w, y, 0), P(x + w, y + h, 0), P(x + w, y + h, z), P(x + w, y, z)], shade(wall, -0.22));
-    this.poly(ctx, [P(x, y + h, 0), P(x + w, y + h, 0), P(x + w, y + h, z), P(x, y + h, z)], wall);
-    const e = 0.08; // alero
+    this.poly(ctx, [P(x + w, y, base), P(x + w, y + h, base), P(x + w, y + h, base + z), P(x + w, y, base + z)], shade(wall, -0.22));
+    this.poly(ctx, [P(x, y + h, base), P(x + w, y + h, base), P(x + w, y + h, base + z), P(x, y + h, base + z)], wall);
+    const Z = base + z;
+    const e = 0.08;
     const [x0, y0, x1, y1] = [x - e, y - e, x + w + e, y + h + e];
-    if (roofType === 'flat') {
-      this.poly(ctx, [P(x0, y0, z), P(x1, y0, z), P(x1, y1, z), P(x0, y1, z)], roof);
-      this.poly(ctx, [P(x0, y1, z), P(x1, y1, z), P(x1, y1, z + 0.12), P(x0, y1, z + 0.12)], shade(roof, 0.15));
-      this.poly(ctx, [P(x1, y0, z), P(x1, y1, z), P(x1, y1, z + 0.12), P(x1, y0, z + 0.12)], shade(roof, -0.15));
-      return;
+    if (roofType === 'teja') {
+      const top = P(x + w / 2, y + h / 2, Z + 0.45 * Math.min(w, h));
+      this.poly(ctx, [P(x0, y0, Z), P(x1, y0, Z), top], shade(roofColor, -0.1));
+      this.poly(ctx, [P(x0, y0, Z), P(x0, y1, Z), top], shade(roofColor, -0.05));
+      this.poly(ctx, [P(x1, y0, Z), P(x1, y1, Z), top], shade(roofColor, -0.3));
+      this.poly(ctx, [P(x0, y1, Z), P(x1, y1, Z), top], shade(roofColor, 0.08));
+    } else if (roofType === 'zinc') {
+      // Una caída hacia adelante, con las ondas de la plancha.
+      this.poly(ctx, [P(x1, y0, Z + 0.22), P(x1, y1, Z), P(x1, y1, Z - 0.03), P(x1, y0, Z + 0.19)], shade(roofColor, -0.3));
+      this.poly(ctx, [P(x0, y0, Z + 0.22), P(x1, y0, Z + 0.22), P(x1, y1, Z), P(x0, y1, Z)], roofColor);
+      ctx.strokeStyle = shade(roofColor, -0.15);
+      ctx.lineWidth = Math.max(0.5, this.tw * 0.012);
+      ctx.beginPath();
+      for (let k = 1; k < 6; k++) {
+        const u = x0 + ((x1 - x0) * k) / 6;
+        ctx.moveTo(...P(u, y0, Z + 0.22));
+        ctx.lineTo(...P(u, y1, Z));
+      }
+      ctx.stroke();
+    } else {
+      this.poly(ctx, [P(x0, y0, Z), P(x1, y0, Z), P(x1, y1, Z), P(x0, y1, Z)], roofColor);
+      this.poly(ctx, [P(x0, y1, Z), P(x1, y1, Z), P(x1, y1, Z + 0.08), P(x0, y1, Z + 0.08)], shade(roofColor, 0.12));
+      this.poly(ctx, [P(x1, y0, Z), P(x1, y1, Z), P(x1, y1, Z + 0.08), P(x1, y0, Z + 0.08)], shade(roofColor, -0.15));
     }
-    const top = P(x + w / 2, y + h / 2, z + 0.5 * Math.min(w, h));
-    this.poly(ctx, [P(x0, y0, z), P(x1, y0, z), top], shade(roof, -0.1));
-    this.poly(ctx, [P(x0, y0, z), P(x0, y1, z), top], shade(roof, -0.05));
-    this.poly(ctx, [P(x1, y0, z), P(x1, y1, z), top], shade(roof, -0.3));
-    this.poly(ctx, [P(x0, y1, z), P(x1, y1, z), top], shade(roof, 0.08));
   }
 
   // Ventana o puerta en la cara de adelante (+y) o la de la derecha (+x).
-  pane(ctx, face, b, a0, a1, z0, z1, fill) {
-    const P = (u, z) => (face === 'y' ? this.P(b.x + u, b.y + b.h, z) : this.P(b.x + b.w, b.y + u, z));
+  pane(ctx, face, b, a0, a1, z0, z1, fill, base = 0) {
+    const P = (u, z) => (face === 'y' ? this.P(b.x + u, b.y + b.h, base + z) : this.P(b.x + b.w, b.y + u, base + z));
     this.poly(ctx, [P(a0, z0), P(a1, z0), P(a1, z1), P(a0, z1)], fill);
   }
 
+  windowsOf(hs) {
+    const out = [];
+    for (let s = 0; s < hs.stories; s++) {
+      const z0 = 0.2 + s * 0.5;
+      if (s > 0) out.push(['y', 0.38, 0.62, z0, z0 + 0.24]);
+      out.push(['y', 0.1, 0.28, z0, z0 + 0.24], ['y', 0.72, 0.9, z0, z0 + 0.24], ['x', 0.3, 0.7, z0, z0 + 0.24]);
+    }
+    return out;
+  }
+
   drawHouse(ctx, hs, night, quarantined) {
-    const b = { x: hs.x, y: hs.y, w: 1, h: 1, z: 0.82 };
-    this.box(ctx, b, hs.wall, hs.roof);
+    const base = hs.stilts ? 0.25 : 0;
+    const b = { x: hs.x, y: hs.y, w: 1, h: 1, z: hs.z };
+    if (hs.stilts) {
+      for (const [sx, sy] of [[0.1, 1], [0.9, 1], [0.9, 0.1]]) this.line(ctx, this.P(hs.x + sx, hs.y + sy, -0.15), this.P(hs.x + sx, hs.y + sy, base), '#6b4f33', Math.max(1, this.tw * 0.03));
+      this.rect(ctx, hs.x - 0.05, hs.y + 1, 1.1, 0.7, '#8a6a45', base);
+    }
+    this.box(ctx, b, hs.wall, hs.roofColor, hs.roof, base);
+    if (hs.cana) {
+      ctx.strokeStyle = shade(hs.wall, -0.25);
+      ctx.lineWidth = Math.max(0.5, this.tw * 0.012);
+      ctx.beginPath();
+      for (let k = 1; k < 8; k++) {
+        ctx.moveTo(...this.P(hs.x + k / 8, hs.y + 1, base));
+        ctx.lineTo(...this.P(hs.x + k / 8, hs.y + 1, base + hs.z));
+      }
+      ctx.stroke();
+    }
     const glass = night > 0.3 ? `rgba(255, 214, 120, ${0.5 + 0.5 * night})` : '#33485c';
-    this.pane(ctx, 'y', b, 0.38, 0.62, 0, 0.5, '#6b4a33');
-    this.pane(ctx, 'y', b, 0.1, 0.28, 0.32, 0.6, glass);
-    this.pane(ctx, 'y', b, 0.72, 0.9, 0.32, 0.6, glass);
-    this.pane(ctx, 'x', b, 0.3, 0.7, 0.32, 0.6, glass);
+    this.pane(ctx, 'y', b, 0.38, 0.62, 0, 0.46, '#6b4a33', base);
+    for (const [f, a0, a1, z0, z1] of this.windowsOf(hs)) this.pane(ctx, f, b, a0, a1, z0, z1, glass, base);
+    if (hs.tank) {
+      // Tanque de agua azul en la losa, típico de la costa.
+      const [tx, ty] = this.P(hs.x + 0.3, hs.y + 0.3, base + hs.z + 0.05);
+      const r = this.tw * 0.09;
+      ctx.fillStyle = '#2f6fb5';
+      ctx.fillRect(tx - r, ty - r * 1.6, r * 2, r * 1.6);
+      ctx.beginPath();
+      ctx.ellipse(tx, ty - r * 1.6, r, r * 0.45, 0, 0, Math.PI * 2);
+      ctx.fillStyle = '#4f8fe8';
+      ctx.fill();
+    }
     if (quarantined) {
       // Cinta morada en la fachada: hogar en cuarentena.
       ctx.lineWidth = Math.max(1.5, this.tw * 0.06);
       ctx.strokeStyle = '#c084fc';
       ctx.beginPath();
-      ctx.moveTo(...this.P(b.x, b.y + 1, 0.75));
-      ctx.lineTo(...this.P(b.x + 1, b.y + 1, 0.1));
-      ctx.moveTo(...this.P(b.x, b.y + 1, 0.1));
-      ctx.lineTo(...this.P(b.x + 1, b.y + 1, 0.75));
+      ctx.moveTo(...this.P(b.x, b.y + 1, base + 0.55));
+      ctx.lineTo(...this.P(b.x + 1, b.y + 1, base + 0.08));
+      ctx.moveTo(...this.P(b.x, b.y + 1, base + 0.08));
+      ctx.lineTo(...this.P(b.x + 1, b.y + 1, base + 0.55));
       ctx.stroke();
     }
   }
 
-  drawPalm(ctx, x, y, now) {
-    const [bx, by] = this.P(x, y);
-    const [tx, ty] = this.P(x, y, 1.5);
-    const sway = Math.sin(now / 1400 + x) * this.tw * 0.04;
-    ctx.strokeStyle = '#7a5a3a';
-    ctx.lineWidth = this.tw * 0.07;
+  drawTree(ctx, d, now) {
+    const [bx, by] = this.P(d.x, d.y);
+    const tw = this.tw;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
     ctx.beginPath();
-    ctx.moveTo(bx, by);
-    ctx.quadraticCurveTo(bx + this.tw * 0.08, (by + ty) / 2, tx + sway, ty);
-    ctx.stroke();
-    ctx.fillStyle = '#3f8a4a';
-    for (let k = 0; k < 6; k++) {
-      const a = (k / 6) * Math.PI * 2 + 0.3;
+    ctx.ellipse(bx, by, tw * 0.22, tw * 0.09, 0, 0, Math.PI * 2);
+    ctx.fill();
+    if (d.type === 'palma') {
+      const [tx, ty] = this.P(d.x, d.y, 1.5);
+      const sway = Math.sin(now / 1400 + d.x) * tw * 0.04;
+      ctx.strokeStyle = '#7a5a3a';
+      ctx.lineWidth = tw * 0.07;
       ctx.beginPath();
-      ctx.ellipse(tx + sway + Math.cos(a) * this.tw * 0.18, ty + Math.sin(a) * this.tw * 0.07, this.tw * 0.2, this.tw * 0.055, a, 0, Math.PI * 2);
-      ctx.fill();
+      ctx.moveTo(bx, by);
+      ctx.quadraticCurveTo(bx + tw * 0.08, (by + ty) / 2, tx + sway, ty);
+      ctx.stroke();
+      ctx.fillStyle = '#3f8a4a';
+      for (let k = 0; k < 6; k++) {
+        const a = (k / 6) * Math.PI * 2 + 0.3;
+        ctx.beginPath();
+        ctx.ellipse(tx + sway + Math.cos(a) * tw * 0.18, ty + Math.sin(a) * tw * 0.07, tw * 0.2, tw * 0.055, a, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    } else {
+      const [tx, ty] = this.P(d.x, d.y, 0.9);
+      ctx.strokeStyle = '#6b4f33';
+      ctx.lineWidth = tw * 0.07;
+      ctx.beginPath();
+      ctx.moveTo(bx, by);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      for (const [dx, dy, r, c] of [[0, -0.05, 0.32, '#3f7d3c'], [-0.12, 0.02, 0.22, '#4a8a45'], [0.14, 0, 0.22, '#356f33']]) {
+        ctx.fillStyle = c;
+        ctx.beginPath();
+        ctx.arc(tx + dx * tw, ty + dy * tw, r * tw, 0, Math.PI * 2);
+        ctx.fill();
+      }
     }
+  }
+
+  drawBoat(ctx, d, now) {
+    const bob = d.beached ? 0 : Math.sin(now / 700 + d.y) * 0.04;
+    const L = d.big ? 2.2 : 1.1;
+    const b = { x: d.x, y: d.y, w: d.big ? 0.8 : 0.45, h: L, z: d.big ? 0.35 : 0.18 };
+    this.box(ctx, b, d.big ? '#7a2e2e' : d.color, d.yate ? '#f4f4f4' : '#8a6a45', 'losa', bob);
+    if (d.big || d.yate) this.box(ctx, { x: d.x + 0.12, y: d.y + L * 0.55, w: b.w - 0.24, h: L * 0.3, z: d.big ? 0.45 : 0.18 }, '#f4f4f4', '#dfe7ec', 'losa', bob + b.z);
+    if (d.big) this.line(ctx, this.P(d.x + 0.4, d.y + 0.5, bob + b.z), this.P(d.x + 0.4, d.y + 0.5, bob + b.z + 1.1), '#3a3f47', Math.max(1, this.tw * 0.03));
+  }
+
+  drawCar(ctx, d) {
+    this.box(ctx, { x: d.x, y: d.y, w: 0.85, h: 0.38, z: 0.2 }, d.color, d.color, 'losa', 0.05);
+    this.box(ctx, { x: d.x + 0.2, y: d.y + 0.04, w: 0.45, h: 0.3, z: 0.14 }, '#2c3e50', shade(d.color, 0.1), 'losa', 0.25);
+  }
+
+  drawChurch(ctx, d, night) {
+    const body = { x: d.x, y: d.y, w: 3.2, h: 2, z: 1.4 };
+    this.box(ctx, body, '#efe6d2', '#b4643c', 'teja');
+    const tower = { x: d.x + 3.2, y: d.y + 1, w: 0.9, h: 0.9, z: 2.8 };
+    this.box(ctx, tower, '#e8dcc2', '#b4643c', 'teja');
+    const [cx, cy] = this.P(d.x + 3.65, d.y + 1.45, 3.4);
+    ctx.strokeStyle = '#3a3f47';
+    ctx.lineWidth = Math.max(1, this.tw * 0.03);
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx, cy - this.tw * 0.25);
+    ctx.moveTo(cx - this.tw * 0.08, cy - this.tw * 0.17);
+    ctx.lineTo(cx + this.tw * 0.08, cy - this.tw * 0.17);
+    ctx.stroke();
+    this.pane(ctx, 'y', body, 1.35, 1.85, 0, 0.75, '#6b4a33');
+    for (const a of [0.4, 2.4]) this.pane(ctx, 'y', body, a, a + 0.35, 0.55, 1.05, night > 0.3 ? '#ffd678' : '#5a7a99');
   }
 
   drawStall(ctx, x, y, k, closed) {
     const b = { x, y, w: 1.4, h: 1, z: 0.5 };
-    this.box(ctx, b, '#8a6440', '#8a6440', 'flat');
-    // Toldo a rayas.
+    this.box(ctx, b, '#8a6440', '#8a6440');
     const colors = [['#e85d5d', '#f4efe2'], ['#4f8fe8', '#f4efe2'], ['#f2c94c', '#e85d5d'], ['#5bbf8a', '#f4efe2']][k % 4];
     for (let s = 0; s < 4; s++) this.poly(ctx, [this.P(x - 0.1 + s * 0.4, y - 0.1, 0.95), this.P(x + 0.3 + s * 0.4, y - 0.1, 0.95), this.P(x + 0.3 + s * 0.4, y + 1.15, 0.8), this.P(x - 0.1 + s * 0.4, y + 1.15, 0.8)], colors[s % 2]);
     if (!closed) {
@@ -391,15 +719,61 @@ export class Barrio {
     }
   }
 
+  // Edificio de trabajo según el tipo: atunera con chimenea, astillero con un barco, oficinas de vidrio…
+  drawWork(ctx, w, night, now) {
+    const b = w.box;
+    const glass = night > 0.3 ? 'rgba(255, 214, 120, 0.8)' : '#3b5268';
+    if (w.kind === 'bodegas') {
+      for (const dy of [0, 2]) {
+        const bb = { ...b, y: b.y + dy };
+        this.box(ctx, bb, w.wall, w.roof, 'zinc');
+        this.pane(ctx, 'y', bb, 0.5, 1.6, 0, 0.8, '#5b636b');
+        this.pane(ctx, 'y', bb, 2.3, 3.4, 0, 0.8, '#5b636b');
+      }
+      return;
+    }
+    this.box(ctx, b, w.wall, w.roof, w.kind === 'astillero' || w.kind === 'taller' ? 'zinc' : 'losa');
+    if (w.kind === 'oficinas') {
+      for (let f = 0; f < 8; f++) {
+        for (let k = 0; k < 4; k++) this.pane(ctx, 'y', b, 0.15 + k * 0.7, 0.65 + k * 0.7, 0.2 + f * 0.55, 0.55 + f * 0.55, glass);
+        for (let k = 0; k < 4; k++) this.pane(ctx, 'x', b, 0.15 + k * 0.7, 0.65 + k * 0.7, 0.2 + f * 0.55, 0.55 + f * 0.55, glass);
+      }
+    } else {
+      for (let k = 0; k < Math.floor(b.w); k++) this.pane(ctx, 'y', b, 0.3 + k, 0.8 + k, b.z * 0.45, b.z * 0.8, glass);
+    }
+    if (w.kind === 'atunera' || w.kind === 'fabrica') {
+      // Chimenea con humo.
+      const c = { x: b.x + b.w - 0.9, y: b.y + 0.3, w: 0.45, h: 0.45, z: b.z + 1.3 };
+      this.box(ctx, c, '#9b8f84', '#5d5650');
+      for (let k = 0; k < 4; k++) {
+        const t = (now / 2600 + k / 4) % 1;
+        const [sx, sy] = this.P(c.x + 0.22 + t * 0.6, c.y + 0.22, c.z + 0.2 + t * 1.6);
+        ctx.fillStyle = `rgba(220, 220, 220, ${0.35 * (1 - t)})`;
+        ctx.beginPath();
+        ctx.arc(sx, sy, this.tw * (0.12 + t * 0.25), 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+    if (w.kind === 'astillero') this.drawBoat(ctx, { x: w.area.x + 2.8, y: w.area.y + 0.4, big: true, beached: true }, now);
+    if (w.kind === 'puerto') {
+      for (let k = 0; k < 6; k++) this.box(ctx, { x: w.area.x + 0.3 + (k % 3) * 1.4, y: w.area.y + 1.6 + Math.floor(k / 3) * 0.8, w: 1.2, h: 0.55, z: 0.5 }, pick(['#c0473d', '#2f6fb5', '#2a9d8f', '#f2994a'], hash(k, 9)), '#8a95a3');
+      const g = this.P(b.x - 0.4, b.y + 1.5);
+      const top = this.P(b.x - 0.4, b.y + 1.5, 3.2);
+      this.line(ctx, g, top, '#f2c94c', this.tw * 0.08);
+      this.line(ctx, top, this.P(b.x - 2.6, b.y + 1.5, 3.2), '#f2c94c', this.tw * 0.06);
+    }
+    if (w.kind === 'mall') this.pane(ctx, 'y', b, 0.6, b.w - 0.6, b.z * 0.62, b.z * 0.88, '#c0473d');
+  }
+
   // Cartel con texto sobre un punto del mundo.
-  sign(ctx, x, y, z, text, bg = '#1b2230', color = '#f4f4f4') {
+  sign(ctx, x, y, z, text, bg = '#16121f', color = '#f4f4f4') {
     const [sx, sy] = this.P(x, y, z);
-    const fs = Math.max(10, this.tw * 0.26);
-    ctx.font = `700 ${fs}px system-ui, sans-serif`;
+    const fs = Math.max(11, this.tw * 0.2);
+    ctx.font = `700 ${fs}px Inter, system-ui, sans-serif`;
     const w = ctx.measureText(text).width + fs * 0.9;
     ctx.fillStyle = bg;
     ctx.beginPath();
-    ctx.roundRect(sx - w / 2, sy - fs * 1.5, w, fs * 1.5, fs * 0.35);
+    ctx.roundRect(sx - w / 2, sy - fs * 1.5, w, fs * 1.5, fs * 0.3);
     ctx.fill();
     ctx.fillStyle = color;
     ctx.textAlign = 'center';
@@ -407,9 +781,9 @@ export class Barrio {
     ctx.textAlign = 'start';
   }
 
-  drawBus(ctx, x) {
-    const b = { x, y: 8.25, w: 2.4, h: 0.85, z: 0.85 };
-    this.box(ctx, b, '#f2c94c', '#e9e4d4', 'flat');
+  drawBus(ctx, x, y) {
+    const b = { x, y, w: 2.4, h: 0.85, z: 0.85 };
+    this.box(ctx, b, '#f2c94c', '#e9e4d4');
     for (let k = 0; k < 4; k++) this.pane(ctx, 'y', b, 0.2 + k * 0.55, 0.6 + k * 0.55, 0.42, 0.72, '#2c3e50');
     this.pane(ctx, 'x', b, 0.15, 0.7, 0.4, 0.75, '#2c3e50');
     this.pane(ctx, 'y', b, 0, 2.4, 0.18, 0.26, '#2f80ed');
@@ -421,57 +795,42 @@ export class Barrio {
     const quarantined = (code & 8) !== 0;
     const state = code & 7;
     const roaming = this.zombie && state === 2 && !quarantined;
-    const night = phase < 0.2 || phase > 0.9;
-    if (night) {
+    if (phase < 0.2 || phase > 0.9) {
       if (!roaming) return null; // de noche todos en casa…
       // …menos los zombis, que vagan por la calle.
-      const x = 0.5 + ((p.j1 * 17 + now / 4000) % 17);
-      return { x, y: ROAD + (p.j2 - 0.5) * 1.4, walking: true, dir: 1 };
+      const c = ROADS[p.j3 < 0.5 ? 0 : 1];
+      const x0 = this.plan.landX(c) + 0.5;
+      const x = x0 + ((p.j1 * 23 + now / 4000) % (G - x0 - 1));
+      return { x, y: c + (p.j2 - 0.5) * 1.4, walking: true, dir: 1 };
     }
     const idle = (pt, amp = 0.07) => ({ x: pt.x + amp * Math.sin(now / 900 + p.j1 * 9), y: pt.y + amp * Math.cos(now / 1100 + p.j2 * 9), walking: false, dir: Math.sin(now / 2000 + p.j3 * 6) > 0 ? 1 : -1 });
     let goes = !quarantined;
     if (p.role === 0) goes &&= hash(p.i, day) < 0.35 && !closed.mercado; // al mercado algunos días
     if (p.role === 1) goes &&= !closed.colegio;
     if (!goes) return idle(p.yard, 0.12);
-    const L = 0.28 + p.j1 * 0.04;
-    const B = 0.66 + p.j2 * 0.05;
-    const travel = 0.045;
+    const { travel } = p.route;
+    const L = 0.27 + p.j1 * 0.05;
+    const B = 0.66 + p.j2 * 0.06;
     if (phase < L || phase >= B + travel) return idle(p.yard);
-    if (p.bus && phase > 0.335 && phase < 0.645) return null; // se fue en el bus
-    const path = (from, to, f) => {
-      const dir = to.x >= from.x ? 1 : -1;
-      const lane = ROAD + (dir > 0 ? -0.35 : 0.35);
-      const pts = [from, { x: from.x, y: lane }, { x: to.x, y: lane }, to];
-      const seg = pts.slice(1).map((q, k) => Math.hypot(q.x - pts[k].x, q.y - pts[k].y));
-      let d = f * seg.reduce((a, b) => a + b, 0);
-      for (let k = 0; k < 3; k++) {
-        if (d <= seg[k] || k === 2) {
-          const u = seg[k] ? Math.min(1, d / seg[k]) : 1;
-          return { x: pts[k].x + (pts[k + 1].x - pts[k].x) * u, y: pts[k].y + (pts[k + 1].y - pts[k].y) * u, walking: true, dir };
-        }
-        d -= seg[k];
-      }
-    };
-    if (phase < L + travel) return path(p.yard, p.dest, (phase - L) / travel);
+    if (p.bus && phase > 0.37 && phase < 0.645) return null; // se fue en el bus
+    if (phase < L + travel) return this.along(p.route, (phase - L) / travel, false);
     if (phase < B) return idle(p.dest, p.bus ? 0.03 : 0.18);
-    return path(p.dest, p.yard, (phase - B) / travel);
+    return this.along(p.route, (phase - B) / travel, true);
   }
 
   drawPerson(ctx, p, pos, state, now) {
     const [sx, sy] = this.P(pos.x, pos.y);
     const s = p.scale;
-    const u = this.tw * 0.105 * s;
+    const u = this.tw * 0.1 * s;
     const zombie = this.zombie && state === 2;
     const skin = zombie ? ZOMBIE_SKIN : p.skin;
-    const speed = zombie ? 0.006 : 0.012;
-    const swing = pos.walking ? Math.sin(now * speed + p.j1 * 10) * u * 0.45 : 0;
+    const swing = pos.walking ? Math.sin(now * (zombie ? 0.006 : 0.012) + p.j1 * 10) * u * 0.45 : 0;
     const lean = zombie ? u * 0.35 * pos.dir : 0;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
     ctx.beginPath();
     ctx.ellipse(sx, sy, u * 1.3, u * 0.55, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.lineCap = 'round';
-    // Piernas.
     ctx.strokeStyle = p.pants;
     ctx.lineWidth = u * 0.5;
     ctx.beginPath();
@@ -480,7 +839,6 @@ export class Barrio {
     ctx.moveTo(sx + u * 0.3, sy - u * 1.6);
     ctx.lineTo(sx + u * 0.3 - swing, sy - u * 0.15);
     ctx.stroke();
-    // Cuerpo.
     ctx.fillStyle = zombie ? shade(p.shirt, -0.35) : p.shirt;
     ctx.beginPath();
     ctx.roundRect(sx - u * 0.72 + lean * 0.5, sy - u * 3.2, u * 1.44, u * 1.8, u * 0.45);
@@ -501,7 +859,6 @@ export class Barrio {
       ctx.lineTo(sx + u * 0.95 + swing * 0.6, sy - u * 1.75);
     }
     ctx.stroke();
-    // Cabeza y pelo.
     const hx = sx + lean;
     const hy = sy - u * 3.85;
     if (p.who.female && p.who.age >= 6 && !zombie) {
@@ -526,7 +883,7 @@ export class Barrio {
     return { sx, sy, top: sy - u * 4.6, u };
   }
 
-  // El rombo de los Sims sobre la cabeza: el color es el estado del día.
+  // El rombo sobre la cabeza: el color es el estado del día.
   drawPlumbob(ctx, x, y, u, color, now, j) {
     const bob = Math.sin(now / 420 + j * 7) * u * 0.25;
     const w = u * 0.55;
@@ -553,8 +910,8 @@ export class Barrio {
   }
 
   bubble(ctx, x, y, text, color) {
-    const fs = Math.max(10, this.tw * 0.24);
-    ctx.font = `800 ${fs}px system-ui, sans-serif`;
+    const fs = Math.max(11, this.tw * 0.22);
+    ctx.font = `800 ${fs}px Inter, system-ui, sans-serif`;
     const w = ctx.measureText(text).width + fs * 0.9;
     const h = fs * 1.5;
     ctx.fillStyle = color;
@@ -598,7 +955,8 @@ export class Barrio {
         const d = run.story.infectedDay[p.i];
         if (d >= 0 && d <= day) total++;
       }
-      return `<button type="button" data-strategy="${k}" class="${k === this.strategy ? 'on' : ''}" aria-pressed="${k === this.strategy}"><b>${label}</b><span>${active} ${this.zombie ? (active === 1 ? 'zombi' : 'zombis') : active === 1 ? 'caso activo' : 'casos activos'} hoy · ${total} ${T.bittenM}</span></button>`;
+      const activeText = this.zombie ? (active === 1 ? 'zombi' : 'zombis') : active === 1 ? 'caso activo' : 'casos activos';
+      return `<button type="button" data-strategy="${k}" class="${k === this.strategy ? 'on' : ''}" aria-pressed="${k === this.strategy}"><b>${label}</b><span><em>${active}</em> ${activeText} hoy · <em>${total}</em> ${T.bittenM} en total</span></button>`;
     }).join('');
   }
 
@@ -612,6 +970,7 @@ export class Barrio {
     const run = t[this.strategy];
     const story = run.story;
     const base = day * t.N;
+    const prevBase = Math.max(0, day - 1) * t.N;
     const inRange = (list, len) => (list ?? []).some((c) => c.parroquia === this.zoneName && day > c.day && day <= c.day + len);
     const closed = {
       mercado: inRange(run.closures.filter((c) => c.layer === 'mercado'), this.closeDays),
@@ -623,34 +982,59 @@ export class Barrio {
 
     this.updateCounts(day);
     const hours = Math.floor(phase * 24);
-    this.clockEl.textContent = `Día ${day} · ${String(hours).padStart(2, '0')}:${String(Math.floor((phase * 24 - hours) * 60 / 15) * 15).padStart(2, '0')}`;
+    const mins = Math.floor(((phase * 24 - hours) * 60) / 15) * 15;
+    this.clockEl.innerHTML = `<b>Día ${day}</b> ${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')} <span>${night > 0.5 ? 'noche' : phase < 0.5 ? 'mañana' : 'tarde'}</span>`;
 
-    ctx.drawImage(this.ground, 0, 0);
+    const camKey = `${this.ox},${this.oy},${this.tw},${this.canvas.width},${this.canvas.height}`;
+    if (this.groundAt !== camKey) this.drawGround();
+    ctx.drawImage(this.groundCanvas, 0, 0);
+    // Olas: líneas que se mueven sobre el agua.
+    if (this.look.water) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = Math.max(1, this.tw * 0.025);
+      ctx.beginPath();
+      for (let k = 0; k < 50; k++) {
+        const y = T + 1 + ((hash(k, 12) * (G - T) + now / 3000) % (G - T - 1));
+        const x = hash(k, 11) * Math.max(0, y - T - 1.2);
+        ctx.moveTo(...this.P(x, y));
+        ctx.lineTo(...this.P(x + 0.5, y));
+      }
+      ctx.stroke();
+    }
+
     // Todo lo que tiene altura se ordena de atrás hacia adelante.
     const items = [];
     for (const hs of this.houses) {
       const quarantined = hs.members.some((i) => run.frames[base + i] & 8);
       items.push({ key: hs.x + hs.y + 1, draw: () => this.drawHouse(ctx, hs, night, quarantined) });
     }
-    for (const tr of this.trees) items.push({ key: tr.x + tr.y, draw: () => this.drawPalm(ctx, tr.x, tr.y, now) });
-    STALLS.forEach(([x, y], k) => items.push({ key: x + y + 1.2, draw: () => this.drawStall(ctx, x, y, k, closed.mercado) }));
-    for (const key of ['colegio', 'trabajo']) {
-      const pl = PLACES[key];
-      items.push({ key: pl.box.x + pl.box.y + (pl.box.w + pl.box.h) / 2, draw: () => {
-        this.box(ctx, pl.box, pl.wall, pl.roof, 'flat');
-        const glass = night > 0.3 ? 'rgba(255, 214, 120, 0.8)' : '#3b5268';
-        for (let k = 0; k < 4; k++) this.pane(ctx, 'y', pl.box, 0.3 + k * 0.85, 0.75 + k * 0.85, 0.45, 0.85, glass);
-        for (let k = 0; k < 2; k++) this.pane(ctx, 'x', pl.box, 0.3 + k * 1.1, 0.9 + k * 1.1, 0.45, 0.85, glass);
-      } });
+    for (const d of this.decor) {
+      const draw = d.type === 'bote' ? () => this.drawBoat(ctx, d, now) : d.type === 'auto' ? () => this.drawCar(ctx, d) : d.type === 'iglesia' ? () => this.drawChurch(ctx, d, night) : () => this.drawTree(ctx, d, now);
+      items.push({ key: d.type === 'iglesia' ? d.x + d.y + 2.6 : d.x + d.y + (d.type === 'bote' ? 0.8 : 0), draw });
     }
-    // Parada y bus.
-    items.push({ key: STOP.x + STOP.y - 0.3, draw: () => {
-      const b = { x: STOP.x - 0.5, y: STOP.y - 0.55, w: 1.1, h: 0.35, z: 0.75 };
-      this.box(ctx, b, '#5d6d7e', '#2f80ed', 'flat');
+    const ma = this.places.market.area;
+    for (let k = 0; k < 6; k++) {
+      const x = ma.x + 0.4 + (k % 2) * 3.6;
+      const y = ma.y + 0.5 + Math.floor(k / 2) * 2.3;
+      items.push({ key: x + y + 1.2, draw: () => this.drawStall(ctx, x, y, k, closed.mercado) });
+    }
+    const sb = this.places.school;
+    items.push({ key: sb.box.x + sb.box.y + (sb.box.w + sb.box.h) / 2, draw: () => {
+      this.box(ctx, sb.box, sb.wall, sb.roof);
+      const glass = night > 0.3 ? 'rgba(255, 214, 120, 0.8)' : '#3b5268';
+      for (let k = 0; k < 4; k++) this.pane(ctx, 'y', sb.box, 0.3 + k * 1.05, 0.8 + k * 1.05, 0.45, 0.9, glass);
+      for (let k = 0; k < 2; k++) this.pane(ctx, 'x', sb.box, 0.3 + k * 1.2, 0.95 + k * 1.2, 0.45, 0.9, glass);
     } });
+    const wk = this.places.work;
+    items.push({ key: wk.box.x + wk.box.y + (wk.box.w + wk.box.h) / 2, draw: () => this.drawWork(ctx, wk, night, now) });
+    const st = this.stop;
+    items.push({ key: st.x + st.y - 0.6, draw: () => this.box(ctx, { x: st.x - 0.55, y: st.y - 0.5, w: 1.1, h: 0.3, z: 0.75 }, '#5d6d7e', '#2f80ed') });
     if (this.hasBus) {
-      const busX = phase >= 0.3 && phase < 0.37 ? -3 + ((phase - 0.3) / 0.07) * 23 : phase >= 0.61 && phase < 0.68 ? -3 + ((phase - 0.61) / 0.07) * 23 : null;
-      if (busX !== null) items.push({ key: busX + 8.6 + 1.6, draw: () => this.drawBus(ctx, busX) });
+      const c = ROADS[0];
+      const x0 = this.plan.landX(c) - 3;
+      const span = G + 4 - x0;
+      const busX = phase >= 0.34 && phase < 0.4 ? x0 + ((phase - 0.34) / 0.06) * span : phase >= 0.61 && phase < 0.67 ? x0 + ((phase - 0.61) / 0.06) * span : null;
+      if (busX !== null) items.push({ key: busX + c + 0.4, draw: () => this.drawBus(ctx, busX, c - 0.9) });
     }
 
     const drawn = [];
@@ -660,14 +1044,15 @@ export class Barrio {
       if (!pos) continue;
       const state = code & 7;
       if (this.zombie && state === 2) pos.x += 0.04 * Math.sin(now / 300 + p.j3 * 9);
-      items.push({ key: pos.x + pos.y, draw: () => drawn.push({ p, state, ...this.drawPerson(ctx, p, pos, state, now) }) });
+      const isNew = day > 0 && state === 2 && (run.frames[prevBase + p.i] & 7) !== 2;
+      items.push({ key: pos.x + pos.y, draw: () => drawn.push({ p, state, isNew, ...this.drawPerson(ctx, p, pos, state, now) }) });
     }
     items.sort((a, b) => a.key - b.key);
     for (const it of items) it.draw();
 
     // Fumigación: niebla que cruza el barrio.
     if (fumigating) {
-      for (let k = 0; k < 26; k++) {
+      for (let k = 0; k < 40; k++) {
         const x = ((hash(k, 1) * G + now / 2500) % (G + 2)) - 1;
         const y = hash(k, 2) * G;
         const [fx, fy] = this.P(x, y, 0.3);
@@ -678,66 +1063,85 @@ export class Barrio {
         ctx.fillRect(fx - this.tw * 1.3, fy - this.tw * 1.3, this.tw * 2.6, this.tw * 2.6);
       }
     }
-    // Noche: el barrio se oscurece; ventanas, rombos y carteles quedan encima.
+    // Noche: el barrio se oscurece; ventanas, faroles, rombos y carteles quedan encima.
+    const { width: W, height: H } = this.canvas;
     if (night > 0) {
-      ctx.fillStyle = `rgba(8, 14, 40, ${0.55 * night})`;
-      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      ctx.fillStyle = `rgba(8, 10, 34, ${0.6 * night})`;
+      ctx.fillRect(0, 0, W, H);
     } else if (phase > 0.7) {
-      ctx.fillStyle = `rgba(255, 140, 60, ${0.12 * Math.min(1, (phase - 0.7) / 0.08)})`;
-      ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+      ctx.fillStyle = `rgba(255, 130, 50, ${0.13 * Math.min(1, (phase - 0.7) / 0.08)})`;
+      ctx.fillRect(0, 0, W, H);
+    } else if (phase < 0.32) {
+      ctx.fillStyle = `rgba(255, 190, 120, ${0.1 * (1 - (phase - 0.26) / 0.06)})`;
+      ctx.fillRect(0, 0, W, H);
     }
     if (night > 0.3) {
+      ctx.globalAlpha = night;
       for (const hs of this.houses) {
         const b = { x: hs.x, y: hs.y, w: 1, h: 1 };
-        ctx.globalAlpha = night;
-        this.pane(ctx, 'y', b, 0.1, 0.28, 0.32, 0.6, '#ffd678');
-        this.pane(ctx, 'y', b, 0.72, 0.9, 0.32, 0.6, '#ffd678');
-        this.pane(ctx, 'x', b, 0.3, 0.7, 0.32, 0.6, '#ffd678');
-        ctx.globalAlpha = 1;
+        for (const [f, a0, a1, z0, z1] of this.windowsOf(hs)) if (hash(hs.home, Math.round(z0 * 10 + a0 * 100)) < 0.7) this.pane(ctx, f, b, a0, a1, z0, z1, '#ffd678', hs.stilts ? 0.25 : 0);
       }
+      for (const c of ROADS) {
+        for (let x = this.plan.landX(c) + 1.5; x < G; x += 3) {
+          const [lx, ly] = this.P(x, c - 1.2, 0.2);
+          const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, this.tw * 0.9);
+          g.addColorStop(0, 'rgba(255, 210, 130, 0.35)');
+          g.addColorStop(1, 'rgba(255, 210, 130, 0)');
+          ctx.fillStyle = g;
+          ctx.fillRect(lx - this.tw, ly - this.tw, this.tw * 2, this.tw * 2);
+        }
+      }
+      ctx.globalAlpha = 1;
     }
 
     // Carteles de los lugares.
-    this.sign(ctx, 13, 3, 1.6, closed.mercado ? 'Mercado · CERRADO' : 'Mercado', closed.mercado ? '#b42318' : '#1b2230');
-    const cb = PLACES.colegio.box;
-    this.sign(ctx, cb.x + cb.w / 2, cb.y + cb.h / 2, cb.z + 0.9, closed.colegio ? 'Colegio · CERRADO' : 'Colegio', closed.colegio ? '#b42318' : '#1b2230');
-    const tb = PLACES.trabajo.box;
-    this.sign(ctx, tb.x + tb.w / 2, tb.y + tb.h / 2, tb.z + 0.9, 'Atunera');
-    if (this.hasBus) this.sign(ctx, STOP.x, STOP.y - 0.4, 1.35, 'Bus', '#2f80ed');
-    if (fumigating) this.sign(ctx, 4, 4, 2.2, 'Brigada de fumigación', '#0f766e');
+    const pl = this.places;
+    this.sign(ctx, ma.x + ma.w / 2, ma.y + ma.h / 2, 1.8, closed.mercado ? `${pl.market.label} · CERRADO` : pl.market.label, closed.mercado ? '#b42318' : undefined);
+    this.sign(ctx, sb.box.x + sb.box.w / 2, sb.box.y + sb.box.h / 2, sb.box.z + 0.9, closed.colegio ? `${sb.label} · CERRADO` : sb.label, closed.colegio ? '#b42318' : undefined);
+    this.sign(ctx, wk.box.x + wk.box.w / 2, wk.box.y + wk.box.h / 2, wk.box.z + 0.9, wk.label);
+    if (this.hasBus) this.sign(ctx, st.x, st.y - 0.4, 1.35, 'Parada de bus', '#2f6fb5');
+    if (fumigating) this.sign(ctx, G / 2, G / 2, 2.4, 'Brigada de fumigación', '#0f766e');
 
-    // Encima de todo: rombos, globos de lo que pasó hoy y la línea de quién mordió a quién.
+    // Encima de todo: rombos, efectos y globos de lo que pasó hoy, y quién mordió a quién.
     this.hits = [];
     const hover = this.mouse ? this.hitAtPoint(drawn) : -1;
     const byI = new Map(drawn.map((d) => [d.p.i, d]));
     for (const d of drawn) {
       this.hits.push({ i: d.p.i, x: d.sx, y: d.sy - d.u * 2.4 });
+      // Nuevo zombi: un destello verde que se expande el día en que aparece.
+      if (d.isNew && this.zombie && phase > 0.2 && phase < 0.75) {
+        const k = (now / 900) % 1;
+        ctx.strokeStyle = `rgba(120, 255, 120, ${0.7 * (1 - k)})`;
+        ctx.lineWidth = Math.max(2, this.tw * 0.06);
+        ctx.beginPath();
+        ctx.ellipse(d.sx, d.sy, d.u * (1.5 + k * 4), d.u * (0.7 + k * 2), 0, 0, Math.PI * 2);
+        ctx.stroke();
+      }
       this.drawPlumbob(ctx, d.sx + (this.zombie && d.state === 2 ? d.u * 0.35 : 0), d.top, d.u / d.p.scale, STATE_COLOR[d.state] ?? STATE_COLOR[0], now, d.p.j1);
     }
-    if (phase > 0.33) {
+    if (phase > 0.33 && phase < 0.68) {
       for (const d of drawn) {
-        const i = d.p.i;
-        const by = story.infectedBy[i];
-        if (story.infectedDay[i] === day && day > 0 && byI.has(by) && phase < 0.68) {
-          const a = byI.get(by);
-          ctx.strokeStyle = '#ff3b3b';
-          ctx.lineWidth = Math.max(1.5, this.tw * 0.05);
-          ctx.setLineDash([this.tw * 0.15, this.tw * 0.1]);
-          ctx.beginPath();
-          ctx.moveTo(a.sx, a.sy - a.u * 2.5);
-          ctx.lineTo(d.sx, d.sy - d.u * 2.5);
-          ctx.stroke();
-          ctx.setLineDash([]);
-        }
+        const by = story.infectedBy[d.p.i];
+        if (story.infectedDay[d.p.i] !== day || day === 0 || !byI.has(by)) continue;
+        const a = byI.get(by);
+        ctx.strokeStyle = '#ff3b3b';
+        ctx.lineWidth = Math.max(1.5, this.tw * 0.05);
+        ctx.setLineDash([this.tw * 0.15, this.tw * 0.1]);
+        ctx.beginPath();
+        ctx.moveTo(a.sx, a.sy - a.u * 2.5);
+        ctx.lineTo(d.sx, d.sy - d.u * 2.5);
+        ctx.stroke();
+        ctx.setLineDash([]);
       }
     }
     for (const d of drawn) {
       const i = d.p.i;
       const f = d.p.who.female;
       const y = d.top - d.u * 2.6;
-      if (story.infectedDay[i] === day && day > 0 && phase > 0.33) this.bubble(ctx, d.sx, y, this.zombie ? (f ? '¡Mordida!' : '¡Mordido!') : f ? 'Contagiada' : 'Contagiado', '#ff6b6b');
-      else if (story.vaccinatedDay[i] === day) this.bubble(ctx, d.sx, y, f ? 'Vacunada' : 'Vacunado', '#2dd4bf');
-      else if (story.detectedDay[i] === day) this.bubble(ctx, d.sx, y, 'Reportado', '#f2b33d');
+      if (story.infectedDay[i] === day && day > 0 && phase > 0.33) this.bubble(ctx, d.sx, y, this.zombie ? (f ? '¡Mordida!' : '¡Mordido!') : f ? 'Contagiada' : 'Contagiado', '#ff8a80');
+      else if (d.isNew && phase > 0.2) this.bubble(ctx, d.sx, y, this.zombie ? '¡Nuevo zombi!' : 'Con síntomas', '#9cf27a');
+      else if (story.vaccinatedDay[i] === day) this.bubble(ctx, d.sx, y, f ? 'Vacunada' : 'Vacunado', '#5eead4');
+      else if (story.detectedDay[i] === day) this.bubble(ctx, d.sx, y, 'Reportado', '#fcd34d');
     }
     // Persona elegida (Modo Vecino) o bajo el cursor: anillo y nombre.
     for (const i of new Set([this.player.selected, hover])) {
@@ -747,13 +1151,13 @@ export class Barrio {
       ctx.strokeStyle = i === this.player.selected ? '#ffffff' : 'rgba(255, 255, 255, 0.6)';
       ctx.lineWidth = Math.max(1.5, this.tw * 0.05);
       ctx.beginPath();
-      ctx.ellipse(d.sx, d.sy, d.u * 2.2 * pulse, d.u * 1 * pulse, 0, 0, Math.PI * 2);
+      ctx.ellipse(d.sx, d.sy, d.u * 2.2 * pulse, d.u * pulse, 0, 0, Math.PI * 2);
       ctx.stroke();
-      const fs = Math.max(11, this.tw * 0.26);
-      ctx.font = `700 ${fs}px system-ui, sans-serif`;
+      const fs = Math.max(12, this.tw * 0.24);
+      ctx.font = `700 ${fs}px Inter, system-ui, sans-serif`;
       ctx.textAlign = 'center';
       ctx.lineWidth = 4;
-      ctx.strokeStyle = '#0c1117';
+      ctx.strokeStyle = '#0c0a12';
       const label = `${d.p.who.name}, ${d.p.who.age}`;
       ctx.strokeText(label, d.sx, d.sy + fs * 1.4);
       ctx.fillStyle = '#ffffff';
@@ -775,25 +1179,33 @@ export class Barrio {
 
   // Una línea que cuenta qué está pasando en el barrio.
   caption(day, phase, closed, fumigating) {
-    const key = `${this.strategy}:${day}:${phase < 0.2 || phase > 0.9 ? 'n' : 'd'}:${closed.mercado}${closed.colegio}${fumigating}`;
+    const isNight = phase < 0.2 || phase > 0.9;
+    const key = `${this.strategy}:${day}:${isNight}:${closed.mercado}${closed.colegio}${fumigating}`;
     if (key === this.captionKey) return;
     this.captionKey = key;
-    const run = this.trace[this.strategy];
+    const t = this.trace;
+    const run = t[this.strategy];
     const s = run.story;
-    let vax = 0, bit = 0, q = 0;
+    let vax = 0;
+    let bit = 0;
+    let fresh = 0;
+    let q = 0;
     for (const p of this.people) {
       if (s.vaccinatedDay[p.i] === day) vax++;
       if (s.infectedDay[p.i] === day && day > 0) bit++;
+      if (day > 0 && (run.frames[day * t.N + p.i] & 7) === 2 && (run.frames[(day - 1) * t.N + p.i] & 7) !== 2) fresh++;
     }
-    for (const hs of this.houses) if (hs.members.some((i) => run.frames[day * this.trace.N + i] & 8)) q++;
+    for (const hs of this.houses) if (hs.members.some((i) => run.frames[day * t.N + i] & 8)) q++;
+    const n = (k, one, many) => `${k} ${k === 1 ? one : many}`;
     const parts = [];
-    if (bit) parts.push(`${bit} ${bit === 1 ? (this.zombie ? 'vecino mordido' : 'vecino contagiado') : this.zombie ? 'vecinos mordidos' : 'vecinos contagiados'} hoy`);
-    if (vax) parts.push(`${vax} ${vax === 1 ? 'vacuna' : 'vacunas'} en el barrio`);
-    if (q) parts.push(`${q} ${q === 1 ? 'casa' : 'casas'} en cuarentena (cinta morada)`);
-    if (closed.mercado) parts.push(`el mercado de ${this.zoneName} está cerrado`);
-    if (closed.colegio) parts.push('el colegio está cerrado: los niños se quedan en casa');
+    if (fresh) parts.push(this.zombie ? n(fresh, 'vecino se convirtió en zombi', 'vecinos se convirtieron en zombis') : n(fresh, 'vecino empezó con síntomas', 'vecinos empezaron con síntomas'));
+    if (bit) parts.push(this.zombie ? n(bit, 'mordido', 'mordidos') : n(bit, 'contagio nuevo', 'contagios nuevos'));
+    if (vax) parts.push(n(vax, 'vacuna aplicada', 'vacunas aplicadas'));
+    if (q) parts.push(`${n(q, 'casa', 'casas')} en cuarentena (cinta morada)`);
+    if (closed.mercado) parts.push('el mercado está cerrado');
+    if (closed.colegio) parts.push('el colegio está cerrado y los niños se quedan en casa');
     if (fumigating) parts.push('pasa la brigada de fumigación');
-    const nightNote = this.zombie && (phase < 0.2 || phase > 0.9) ? ' De noche todos duermen… menos los zombis.' : '';
-    this.captionEl.textContent = (parts.length ? `${parts.join(' · ')}.` : 'Un día normal en el barrio.') + nightNote;
+    const nightNote = this.zombie && isNight ? ' De noche todos duermen, menos los zombis.' : '';
+    this.captionEl.textContent = (parts.length ? `Hoy: ${parts.join(' · ')}.` : 'Un día normal en el barrio.') + nightNote;
   }
 }
