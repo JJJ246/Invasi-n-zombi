@@ -4,21 +4,42 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
-  <title>Comité de Contención · Simulador de brotes</title>
-  <meta name="description" content="Simula cómo se propaga un brote en una ciudad real y encuentra a quién vacunar, qué cerrar y dónde fumigar con recursos limitados.">
+  <title>Comité de Contención · Frena la plaga</title>
+  <meta name="description" content="Simula cómo se propaga una plaga en Manta y encuentra a quién vacunar, qué cerrar y dónde actuar con recursos limitados.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Special+Elite&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Special+Elite&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
   <script src="config.js"></script>
   <script type="module" src="app.js"></script>
 </head>
 <body>
+  <!-- Íconos (se usan con <use href="#i-…">) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-bio" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><circle cx="7.5" cy="15.2" r="4"/><circle cx="16.5" cy="15.2" r="4"/><circle cx="12" cy="12.6" r="1.6"/></symbol>
+    <symbol id="i-pin" viewBox="0 0 24 24"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></symbol>
+    <symbol id="i-syringe" viewBox="0 0 24 24"><path d="m18 2 4 4M16 4l4 4M19 7 9 17l-4-4L15 3M7 15l-5 5M10 8l2 2M13 5l2 2"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="m9 12 2 2 4-4"/></symbol>
+    <symbol id="i-dice" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="3"/><circle cx="9" cy="9" r="1"/><circle cx="15" cy="15" r="1"/><circle cx="15" cy="9" r="1"/><circle cx="9" cy="15" r="1"/></symbol>
+    <symbol id="i-trophy" viewBox="0 0 24 24"><path d="M8 4h8v5a4 4 0 0 1-8 0zM8 6H5a3 3 0 0 0 3 4M16 6h3a3 3 0 0 1-3 4M12 13v4M8 20h8"/></symbol>
+    <symbol id="i-coins" viewBox="0 0 24 24"><ellipse cx="12" cy="7" rx="7" ry="3"/><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5"/></symbol>
+    <symbol id="i-hand" viewBox="0 0 24 24"><path d="M8 21v-8M8 13V6a1.5 1.5 0 0 1 3 0v6M11 11V4a1.5 1.5 0 0 1 3 0v7M14 11V5.5a1.5 1.5 0 0 1 3 0V14c0 4-2 7-6 7H9l-3-5"/></symbol>
+    <symbol id="i-virus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M5 19l2-2M17 7l2-2"/></symbol>
+    <symbol id="i-mosquito" viewBox="0 0 24 24"><ellipse cx="12" cy="13" rx="2" ry="5"/><path d="m12 8-1-3M12 8l1-3M10 12 4 8M14 12l6-4M10 15l-5 4M14 15l5 4M10 13H4M14 13h6"/></symbol>
+    <symbol id="i-rain" viewBox="0 0 24 24"><path d="M7 15a4 4 0 0 1 0-8 5 5 0 0 1 9.6-1.5A4 4 0 0 1 17 15z"/><path d="m8 18-1 3M12 18l-1 3M16 18l-1 3"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4l13 8-13 8z"/></symbol>
+    <symbol id="i-full" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6"/><circle cx="17" cy="9" r="2.5"/><path d="M15.5 14.2A5 5 0 0 1 21 19"/></symbol>
+    <symbol id="i-zap" viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></symbol>
+    <symbol id="i-tree" viewBox="0 0 24 24"><circle cx="5" cy="12" r="2.5"/><circle cx="19" cy="5" r="2.5"/><circle cx="19" cy="19" r="2.5"/><path d="M7.5 12h4l5-6M11.5 12l5 6"/></symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24"><path d="M3 20h18M5 16l4-6 4 3 6-8"/></symbol>
+  </svg>
+
   <header class="top">
     <a class="brand" href="portada.html">
-      <span class="logo" aria-hidden="true"></span>
-      <span><b>Comité de Contención</b><small>Simulador de brotes</small></span>
+      <img class="logo" src="logo.svg" alt="" width="44" height="44">
+      <span><b>Comité de Contención</b><small>Frena la plaga en Manta</small></span>
     </a>
     <nav class="top-links">
       <a href="portada.html">La historia</a>
@@ -28,9 +49,13 @@
 
   <main class="page">
     <section class="intro">
-      <p class="kicker">Simulador · Manta y Guayaquil</p>
-      <h1>Hay un brote. Las vacunas no alcanzan. ¿Qué hace el Comité?</h1>
-      <p class="lead">Elige el brote, ajusta los recursos y pulsa <b>Calcular el mejor plan</b>. El Comité prueba 21 planes distintos en miles de simulaciones y te muestra el que deja menos personas afectadas, barrio por barrio.</p>
+      <h1>¿Cómo frenamos la plaga?</h1>
+      <p class="lead">Elige el brote, pulsa <b>Calcular</b> y mira cuántas vidas salva el mejor plan.</p>
+      <ul class="facts">
+        <li><svg class="ic"><use href="#i-users"/></svg>10.000 vecinos simulados</li>
+        <li><svg class="ic"><use href="#i-bio"/></svg>21 planes probados</li>
+        <li><svg class="ic"><use href="#i-dice"/></svg>Comparado con no hacer nada y con el azar</li>
+      </ul>
     </section>
 
     <form id="controls" class="setup" autocomplete="off" novalidate>
@@ -41,56 +66,50 @@
 
       <section class="step">
         <h2 class="step-title"><span class="num">2</span>¿Dónde empieza?</h2>
-        <label>Ciudad
+        <label><span class="lab"><svg class="ic"><use href="#i-pin"/></svg>Ciudad</span>
           <select name="city">
-            <option value="manta">Manta (Manabí) · 258.697 habitantes</option>
-            <option value="guayaquil">Guayaquil (Guayas) · 2.650.288 habitantes</option>
+            <option value="manta">Manta</option>
+            <option value="guayaquil">Guayaquil</option>
           </select>
         </label>
-        <label>Primer caso
+        <label><span class="lab"><svg class="ic"><use href="#i-hand"/></svg>Primer caso</span>
           <select name="start"></select>
         </label>
-        <label class="slider">Qué tan contagioso es
-          <span class="value"><output id="r0Out"></output> <small>personas por caso</small></span>
+        <label class="slider"><span class="lab"><svg class="ic"><use href="#i-virus"/></svg>Contagio</span>
+          <span class="value"><output id="r0Out"></output> <small>por caso</small></span>
           <input type="range" name="r0" min="0.8" max="5" step="0.1">
-        </label>
-        <label class="inline">Casos al inicio
-          <input type="number" name="initialInfected" min="1" max="200" step="1">
         </label>
       </section>
 
       <section class="step">
         <h2 class="step-title"><span class="num">3</span>¿Con qué cuenta el Comité?</h2>
-        <label class="slider">Vacunas por día
+        <label class="slider"><span class="lab"><svg class="ic"><use href="#i-syringe"/></svg>Vacunas por día</span>
           <span class="value"><output id="dosesOut"></output></span>
           <input type="range" name="dosesPerDay" min="0" max="100000" step="250">
         </label>
-        <label class="slider">Cuánto protege la vacuna
+        <label class="slider"><span class="lab"><svg class="ic"><use href="#i-shield"/></svg>La vacuna protege</span>
           <span class="value"><output id="effOut"></output></span>
           <input type="range" name="vaccineEfficacy" min="0" max="1" step="0.05">
         </label>
-        <div class="row">
-          <label>Presupuesto (USD)
-            <input type="number" name="budget" min="0" step="10000">
-          </label>
-          <label>Actúa desde el día
-            <input type="number" name="responseStartDay" min="0" max="120">
-          </label>
-        </div>
+        <label class="slider"><span class="lab"><svg class="ic"><use href="#i-coins"/></svg>Presupuesto</span>
+          <span class="value"><output id="budgetOut"></output></span>
+          <input type="range" name="budget" min="0" max="10000000" step="10000">
+        </label>
       </section>
 
       <div class="run">
-        <button type="submit" class="primary" id="runBtn">Calcular el mejor plan</button>
+        <button type="submit" class="primary" id="runBtn"><svg class="ic"><use href="#i-play"/></svg>Calcular el mejor plan</button>
+        <label class="seed">Semilla <input type="number" name="seed" min="0" max="4294967295" step="1"></label>
         <div class="statusbar" aria-live="polite">
-          <span id="status" class="status">Tarda unos segundos y corre en tu navegador.</span>
+          <span id="status" class="status">Corre en tu navegador, en segundos.</span>
           <progress id="progress" max="100" value="0" hidden></progress>
         </div>
-        <label class="check" id="cloudRow" hidden>
-          <input type="checkbox" id="useCloud" checked> Calcular en AWS
-        </label>
+        <label class="check" id="cloudRow" hidden><input type="checkbox" id="useCloud" checked> Calcular en AWS</label>
         <details class="more-opts">
-          <summary>Más supuestos</summary>
+          <summary>Ajustes avanzados</summary>
           <div class="grid-opts">
+            <label>Casos al inicio <input type="number" name="initialInfected" min="1" max="200" step="1"></label>
+            <label>El Comité actúa desde el día <input type="number" name="responseStartDay" min="0" max="120"></label>
             <label>Llegan las vacunas el día <input type="number" name="vaccineStartDay" min="0" max="120"></label>
             <label>Días a simular <input type="number" name="days" min="30" max="365"></label>
             <label>Casos reportados por día (0 a 1) <input type="number" name="detectionProb" min="0.01" max="1" step="any"></label>
@@ -102,44 +121,44 @@
             <label>Días incubando (máx.) <input type="number" name="latentMax" min="1" max="30"></label>
             <label>Días contagiando (mín.) <input type="number" name="infectiousMin" min="1" max="30"></label>
             <label>Días contagiando (máx.) <input type="number" name="infectiousMax" min="1" max="30"></label>
-            <label>Semilla <input type="number" name="seed" min="0" max="4294967295" step="1"></label>
             <label>Simulaciones <input type="number" name="runs" min="10" max="5000" step="10"></label>
-            <label class="check"><input type="checkbox" name="vectorBorne"> Lo transmite un mosquito (permite fumigar)</label>
+            <label class="check"><input type="checkbox" name="vectorBorne"> Lo transmite un mosquito</label>
           </div>
-          <p class="hint">Misma semilla y mismos datos dan siempre el mismo resultado. <button type="button" class="link-btn" id="resetBtn">Volver a los valores del escenario</button></p>
+          <p class="hint">Misma semilla y mismos datos, mismo resultado. <button type="button" class="link-btn" id="resetBtn">Volver a los valores del escenario</button></p>
         </details>
       </div>
     </form>
 
     <section class="results">
       <div class="empty" id="empty">
-        <p>Aquí aparecerá el plan del Comité y el barrio con sus vecinos, día a día.</p>
+        <img src="logo.svg" alt="" width="64" height="64">
+        <p>Aquí aparecerá el plan del Comité y el barrio con sus vecinos.</p>
       </div>
 
       <div class="summary" id="summary" hidden>
         <article class="card plan" id="planCard" hidden>
-          <p class="eyebrow" id="planTitle">Plan recomendado</p>
+          <p class="eyebrow" id="planTitle">El plan</p>
           <p id="headline" class="headline"></p>
           <ol id="planSteps" class="plan-steps"></ol>
           <div id="verdict" class="verdict" hidden></div>
         </article>
         <div class="kpis">
-          <div class="kpi good"><span class="kpi-label">Personas protegidas frente a no hacer nada</span><span id="kSavedNone" class="kpi-value">—</span><span id="kSavedNoneRange" class="kpi-range"></span></div>
-          <div class="kpi"><span class="kpi-label">Frente a repartir lo mismo al azar</span><span id="kSavedRandom" class="kpi-value">—</span><span id="kSavedRandomRange" class="kpi-range"></span></div>
-          <div class="kpi"><span class="kpi-label">Brotes en que el plan gana al azar</span><span id="kWin" class="kpi-value">—</span><span id="kWinNote" class="kpi-range"></span></div>
-          <div class="kpi"><span class="kpi-label">Costo promedio</span><span id="kCost" class="kpi-value">—</span><span id="kCostNote" class="kpi-range"></span></div>
+          <div class="kpi good"><svg class="ic"><use href="#i-shield"/></svg><span id="kSavedNone" class="kpi-value">—</span><span class="kpi-label">personas a salvo frente a no hacer nada</span><span id="kSavedNoneRange" class="kpi-range"></span></div>
+          <div class="kpi"><svg class="ic"><use href="#i-dice"/></svg><span id="kSavedRandom" class="kpi-value">—</span><span class="kpi-label">más que repartir lo mismo al azar</span><span id="kSavedRandomRange" class="kpi-range"></span></div>
+          <div class="kpi"><svg class="ic"><use href="#i-trophy"/></svg><span id="kWin" class="kpi-value">—</span><span class="kpi-label">de los brotes gana al azar</span><span id="kWinNote" class="kpi-range"></span></div>
+          <div class="kpi"><svg class="ic"><use href="#i-coins"/></svg><span id="kCost" class="kpi-value">—</span><span class="kpi-label">costo promedio</span><span id="kCostNote" class="kpi-range"></span></div>
         </div>
       </div>
 
       <div class="surprise" id="surprise" hidden>
-        <span class="surprise-title">Brote sorpresa <small>cambia una condición y el plan se recalcula</small></span>
+        <span class="surprise-title"><svg class="ic"><use href="#i-zap"/></svg>Brote sorpresa</span>
         <div class="presets">
-          <button type="button" data-preset="doble">El doble de contagioso</button>
-          <button type="button" data-preset="mitad">La mitad de vacunas</button>
-          <button type="button" data-preset="variante">La vacuna protege a medias</button>
-          <button type="button" data-preset="tarde">Se actúa 10 días tarde</button>
-          <button type="button" data-preset="pobre">La mitad del presupuesto</button>
-          <button type="button" data-preset="mercado">Empieza en otro mercado</button>
+          <button type="button" data-preset="doble">×2 contagio</button>
+          <button type="button" data-preset="mitad">½ vacunas</button>
+          <button type="button" data-preset="variante">Vacuna a medias</button>
+          <button type="button" data-preset="tarde">10 días tarde</button>
+          <button type="button" data-preset="pobre">½ presupuesto</button>
+          <button type="button" data-preset="mercado">Otro mercado</button>
         </div>
       </div>
 
@@ -148,7 +167,7 @@
       <article class="card city" id="cityCard" hidden>
         <div class="city-top">
           <div class="view-tabs" role="tablist" aria-label="Vista">
-            <button type="button" role="tab" data-view="barrio" aria-selected="true">El barrio, de cerca</button>
+            <button type="button" role="tab" data-view="barrio" aria-selected="true">El barrio</button>
             <button type="button" role="tab" data-view="mapa" aria-selected="false">Toda la ciudad</button>
           </div>
           <div class="city-controls">
@@ -160,11 +179,11 @@
               <option value="10" selected>Normal</option>
               <option value="25">Rápido</option>
             </select>
-            <button type="button" id="meetBtn" disabled title="Alguien que se salva gracias al plan">Conocer a un vecino</button>
-            <button type="button" id="fullBtn" title="Pantalla completa">Pantalla completa</button>
+            <button type="button" id="meetBtn" disabled title="Conocer a un vecino que se salva gracias al plan"><svg class="ic"><use href="#i-users"/></svg>Un vecino</button>
+            <button type="button" id="fullBtn" title="Pantalla completa" aria-label="Pantalla completa"><svg class="ic"><use href="#i-full"/></svg></button>
           </div>
         </div>
-        <p class="hint" id="cityNote"></p>
+        <p class="hint" id="cityNote" hidden></p>
         <div class="city-body">
           <div class="views">
             <section class="barrio" id="barrio" aria-label="Un barrio visto de cerca">
@@ -173,9 +192,9 @@
                 <canvas aria-label="Barrio en perspectiva: cada figura es una persona; el rombo sobre su cabeza es su estado"></canvas>
                 <div class="barrio-top">
                   <span class="barrio-clock">Día 0</span>
-                  <label class="barrio-zone-label">Zona <select class="barrio-zone" aria-label="Zona"></select></label>
-                  <span class="zoom"><button type="button" data-zoom="-" aria-label="Alejar">−</button><button type="button" data-zoom="+" aria-label="Acercar">+</button></span>
+                  <label class="barrio-zone-label"><svg class="ic"><use href="#i-pin"/></svg><select class="barrio-zone" aria-label="Zona"></select></label>
                 </div>
+                <div class="barrio-cams" role="group" aria-label="Vista"></div>
                 <p class="barrio-name"></p>
               </div>
               <p class="barrio-caption events"></p>
@@ -187,7 +206,7 @@
                 <div class="city-stats"></div>
               </figure>
               <figure class="panel-city" data-strategy="azar">
-                <figcaption><span class="dot" style="--c: var(--warn)"></span>Mismos recursos, al azar</figcaption>
+                <figcaption><span class="dot" style="--c: var(--warn)"></span>Al azar</figcaption>
                 <canvas></canvas>
                 <div class="city-stats"></div>
               </figure>
@@ -202,45 +221,63 @@
         </div>
         <div class="legend" id="legend"></div>
         <p id="cityEvents" class="events"></p>
-        <p class="attribution" id="barrioNote">Toca a cualquier vecino para ver su historia. Arrastra para moverte por el barrio. Casas y vecinos son los de la simulación (los hogares más cercanos entre sí en el mapa real); calles y edificios son un dibujo de cómo es la zona, no un plano. Nombres y edades son ilustrativos.</p>
-        <p class="attribution" id="mapNote" hidden>Mapa real: imagen satelital © Esri, Maxar, Earthstar Geographics · límites y densidad de edificios © colaboradores de <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>. Cada punto es una persona simulada, ubicada donde de verdad hay casas.</p>
+        <p class="attribution" id="barrioNote">Toca a un vecino para ver su historia. Casas y vecinos salen de la simulación; el barrio es un dibujo de la zona.</p>
+        <p class="attribution" id="mapNote" hidden>Imagen satelital © Esri, Maxar, Earthstar Geographics · límites © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>. Cada punto es una persona simulada.</p>
+      </article>
+
+      <article class="card tree" id="treeCard" hidden>
+        <div class="tree-top">
+          <h3><svg class="ic"><use href="#i-tree"/></svg>¿Cómo se propagó?</h3>
+          <div class="tree-tabs">
+            <button type="button" data-tree="nada" class="on">Sin hacer nada <em>0</em></button>
+            <button type="button" data-tree="adaptativa">Con el plan <em>0</em></button>
+          </div>
+        </div>
+        <p class="tree-head"></p>
+        <div class="tree-wrap"><svg class="tree-svg" role="img" aria-label="Árbol de contagio desde el paciente cero"></svg></div>
+        <p class="legend tree-legend"><span><i style="--c:#c8a6dc"></i>casa</span><span><i style="--c:#f2c94c"></i>colegio</span><span><i style="--c:#8fbcd4"></i>trabajo</span><span><i style="--c:#ff9f43"></i>bus</span><span><i style="--c:#ff6b6b"></i>mercado</span><span><i style="--c:#9be15d"></i>barrio</span></p>
       </article>
 
       <article class="card" id="curveCard" hidden>
-        <h3 id="curveTitle">Casos activos por día <small>promedio y rango del 5 % al 95 % de las simulaciones</small></h3>
+        <h3 id="curveTitle"><svg class="ic"><use href="#i-chart"/></svg>Casos activos por día <small>promedio y rango 5 %–95 %</small></h3>
         <div class="chart"><canvas id="curve"></canvas></div>
       </article>
 
-      <div class="details-grid" id="detailsGrid" hidden>
-        <details class="card more">
-          <summary>Detalle de los resultados</summary>
-          <table class="table" id="compare">
-            <thead><tr><th>Estrategia</th><th id="thInfected">Personas afectadas</th><th>Rango (5 %–95 %)</th><th>Pico</th><th>Costo</th></tr></thead>
-            <tbody></tbody>
-          </table>
-          <p class="hint" id="wasted"></p>
-        </details>
-        <details class="card more">
-          <summary>Informe para la alcaldía</summary>
-          <pre id="report" class="report">Aparecerá aquí después de simular.</pre>
-          <button type="button" id="copyBtn">Copiar informe</button>
-        </details>
-        <details class="card more">
-          <summary>Cómo se eligió el plan</summary>
-          <p class="hint">Se probaron <span id="nPolicies">21</span> combinaciones en simulaciones de entrenamiento, con semillas distintas a las de la evaluación. Gana la que deja menos personas afectadas; si empatan, la más barata.</p>
-          <div class="table-wrap">
-            <table class="table" id="ranking">
-              <thead><tr><th>#</th><th>A quién vacunar primero</th><th>Cierres</th><th>Cuarentenas</th><th>Fumigación</th><th>Reserva</th><th>Afectados</th><th>Costo</th></tr></thead>
-              <tbody></tbody>
-            </table>
-          </div>
-        </details>
-        <details class="card more">
-          <summary>Calibración con datos reales (dengue, Manabí 2024)</summary>
-          <div class="chart"><canvas id="calib"></canvas></div>
-          <p class="hint" id="calibNote"></p>
-        </details>
-      </div>
+      <details class="card more" id="detailsGrid" hidden>
+        <summary>Detalles técnicos</summary>
+        <div class="details-grid">
+          <section>
+            <h4>Resultados</h4>
+            <div class="table-wrap">
+              <table class="table" id="compare">
+                <thead><tr><th>Estrategia</th><th id="thInfected">Afectados</th><th>Rango (5 %–95 %)</th><th>Pico</th><th>Costo</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <p class="hint" id="wasted"></p>
+          </section>
+          <section>
+            <h4>Informe para la alcaldía</h4>
+            <pre id="report" class="report">Aparecerá aquí después de simular.</pre>
+            <button type="button" id="copyBtn">Copiar informe</button>
+          </section>
+          <section>
+            <h4>Cómo se eligió el plan</h4>
+            <p class="hint">Se probaron <span id="nPolicies">21</span> planes con semillas distintas a las de la evaluación. Gana el que deja menos afectados; si empatan, el más barato.</p>
+            <div class="table-wrap">
+              <table class="table" id="ranking">
+                <thead><tr><th>#</th><th>Vacunar primero</th><th>Cierres</th><th>Cuarentenas</th><th>Fumigación</th><th>Reserva</th><th>Afectados</th><th>Costo</th></tr></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+          </section>
+          <section>
+            <h4>Calibración con datos reales (dengue, Manabí 2024)</h4>
+            <div class="chart"><canvas id="calib"></canvas></div>
+            <p class="hint" id="calibNote"></p>
+          </section>
+        </div>
+      </details>
 
       <p class="footer" id="footer"></p>
     </section>

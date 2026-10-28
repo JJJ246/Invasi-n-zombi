@@ -3,6 +3,7 @@ import { CITIES } from './engine/cities.js';
 import { headline, mayorReport, TERMS } from './engine/report.js';
 import { CityPlayer } from './city.js';
 import { Barrio } from './barrio.js';
+import { ContagionMap } from './contagio.js';
 import { renderVecino, interestingPeople } from './vecino.js';
 import { CALIBRATION } from './engine/calibration.js';
 import { DENGUE_MANABI_2024 } from './engine/dengue-manabi-2024.js';
@@ -40,6 +41,7 @@ let scenario = 'zombi';
 const terms = () => TERMS[SCENARIOS[scenario].theme];
 const player = new CityPlayer(document.querySelector('.city'));
 const barrio = new Barrio($('barrio'), player);
+const tree = new ContagionMap($('treeCard'), player);
 
 // Vista: el barrio de cerca (vecinos caminando, al estilo de un juego) o toda la ciudad (tres mapas).
 function setView(view) {
@@ -64,8 +66,9 @@ document.querySelector('.view-tabs').addEventListener('click', (e) => {
 setView('barrio');
 
 // ---------- Escenarios y ciudad ----------
+const SCENARIO_ICON = { zombi: 'i-hand', influenza: 'i-virus', dengue: 'i-mosquito', nino: 'i-rain' };
 $('scenarios').innerHTML = Object.entries(SCENARIOS)
-  .map(([key, s]) => `<label class="scenario"><input type="radio" name="scenario" value="${key}"><b>${s.title}</b><span>${s.sub}</span></label>`)
+  .map(([key, s]) => `<label class="scenario"><input type="radio" name="scenario" value="${key}"><span class="sc-ic"><svg class="ic"><use href="#${SCENARIO_ICON[key]}"/></svg></span><b>${s.title}</b><span class="sub">${s.sub}</span></label>`)
   .join('');
 
 function fillStart(city, value) {
@@ -112,6 +115,7 @@ function updateOutputs() {
   $('r0Out').textContent = Number(form.elements.r0.value).toFixed(1).replace('.', ',');
   $('dosesOut').textContent = fmt(form.elements.dosesPerDay.value);
   $('effOut').textContent = `${Math.round(form.elements.vaccineEfficacy.value * 100)} %`;
+  $('budgetOut').textContent = usd(form.elements.budget.value);
 }
 
 // Al cambiar de ciudad: sus valores por defecto de población, recursos y lugar de inicio.
@@ -157,6 +161,7 @@ player.onSelect = (i) => {
   vecino.hidden = false;
 };
 player.onDay = (day) => {
+  tree.setDay(day);
   if (!vecino.hidden && player.selected >= 0) renderVecino(vecino, player.trace, player.selected, day, SCENARIOS[scenario].theme);
 };
 vecino.addEventListener('click', (e) => {
@@ -221,6 +226,7 @@ function loadCity(s) {
     worker.terminate();
     if (data.type !== 'trace') return;
     barrio.load(data.trace, makeConfig(s.config), SCENARIOS[scenario].theme, terms());
+    tree.load(data.trace, SCENARIOS[scenario].theme);
     player.load(data.trace, s.config, s.runs, terms());
     vecino.hidden = true;
     neighbours = interestingPeople(data.trace);
@@ -280,7 +286,7 @@ function render(s, seconds) {
   const T = terms();
   // Primer resultado: aparecen el plan, el barrio y los detalles.
   const first = !$('empty').hidden;
-  for (const id of ['summary', 'surprise', 'cityCard', 'curveCard', 'detailsGrid']) $(id).hidden = false;
+  for (const id of ['summary', 'surprise', 'cityCard', 'treeCard', 'curveCard', 'detailsGrid']) $(id).hidden = false;
   $('empty').hidden = true;
   if (first) $('summary').scrollIntoView({ behavior: 'smooth', block: 'start' });
   const sc = SCENARIOS[scenario];
@@ -293,7 +299,7 @@ function render(s, seconds) {
   const lines = report.split('\n');
   const from = lines.indexOf('QUÉ HACER') + 1;
   const to = lines.indexOf('', from);
-  $('planTitle').textContent = `Plan recomendado · ${city.name}`;
+  $('planTitle').textContent = `El plan · ${city.name}`;
   $('headline').textContent = headline(s);
   $('planSteps').innerHTML = lines.slice(from, to).map((l) => `<li>${l.replace(/^\d+\.\s*/, '')}</li>`).join('');
   $('planCard').hidden = false;

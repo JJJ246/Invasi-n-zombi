@@ -10,8 +10,20 @@ import { CITIES } from './engine/cities.js';
 import { lookOf } from './barrios.js';
 
 const G = 30; // casillas por lado
-const ROADS = [10, 20]; // centro de las calles (horizontales y verticales), de 2 casillas de ancho
-const SPANS = [[0, 9], [11, 19], [21, 30]]; // manzanas entre calles
+// Calles y manzanas: cambian con cada zona (setStreets), así cada barrio tiene su propio trazado.
+let ROADS = [10, 20]; // centro de las calles (horizontales y verticales), de 2 casillas de ancho
+let SPANS = [[0, 9], [11, 19], [21, 30]]; // manzanas entre calles
+function setStreets(roads) {
+  ROADS = roads;
+  SPANS = [[0, roads[0] - 1], [roads[0] + 1, roads[1] - 1], [roads[1] + 1, G]];
+}
+// Distribuciones posibles: qué hay en el centro del barrio y qué alrededor.
+const LAYOUTS = {
+  mercado: { market: [1, 1], work: [2, 1], school: [1, 0], plaza: [2, 2] },
+  plaza: { plaza: [1, 1], market: [1, 0], school: [2, 1], work: [2, 0] },
+  trabajo: { work: [1, 1], market: [2, 1], school: [1, 0], plaza: [2, 2] },
+  escuela: { school: [1, 1], market: [1, 0], work: [2, 1], plaza: [2, 2] },
+};
 const STATE_COLOR = ['#5fd38d', '#facc15', '#ff3b3b', '#60a5fa', '#2dd4bf'];
 const SHIRTS = ['#e85d5d', '#4f8fe8', '#f2c94c', '#5bbf8a', '#f4f4f4', '#b07be0', '#f08a3c', '#3fb8c4', '#2f3b52', '#e87fb0'];
 const SKIN = ['#8d5a3b', '#a86b47', '#c68a5e', '#e0ad84'];
@@ -41,10 +53,11 @@ function hash(a, b = 0) {
 }
 const pick = (list, r) => list[Math.floor(r * list.length) % list.length];
 
+// Aclara (k > 0) u oscurece (k < 0) un color "#rrggbb" o "rgb(r, g, b)".
 function shade(color, k) {
-  const n = parseInt(color.slice(1), 16);
+  const [r, g, b] = color[0] === '#' ? [1, 3, 5].map((i) => parseInt(color.slice(i, i + 2), 16)) : color.match(/\d+/g).map(Number);
   const f = (c) => Math.max(0, Math.min(255, Math.round(k < 0 ? c * (1 + k) : c + (255 - c) * k)));
-  return `rgb(${f(n >> 16)}, ${f((n >> 8) & 255)}, ${f(n & 255)})`;
+  return `rgb(${f(r)}, ${f(g)}, ${f(b)})`;
 }
 const block = (bi, bj) => ({ x0: SPANS[bi][0], x1: SPANS[bi][1], y0: SPANS[bj][0], y1: SPANS[bj][1] });
 const nearestRoad = (v) => (Math.abs(v - ROADS[0]) <= Math.abs(v - ROADS[1]) ? ROADS[0] : ROADS[1]);
@@ -57,9 +70,9 @@ function planFor(look) {
   const shore = water ? T - (look.beach ? 1.6 : 0.8) : Infinity; // más allá: playa o malecón, luego agua
   const landX = (y) => Math.max(0, y - shore); // primer x en tierra firme para esa fila
   // El mercado en el centro (ahí empieza el brote de la demo); el trabajo, el colegio y la plaza alrededor.
-  const blocks = { plaza: [2, 2], market: [1, 1], school: [1, 0], work: [2, 1] };
+  const blocks = LAYOUTS[look.layout ?? 'mercado'];
   // Con agua, la plaza se cambia por más casas: el agua ya ocupa una esquina del barrio.
-  const used = new Set(Object.entries(blocks).filter(([k]) => !(water && k === 'plaza')).map(([, [i, j]]) => `${i},${j}`));
+  const used = new Set(Object.entries(blocks).filter(([k, [i, j]]) => !(water && k === 'plaza' && !(i === 1 && j === 1))).map(([, [i, j]]) => `${i},${j}`));
   const slots = [];
   for (let bi = 0; bi < 3; bi++) {
     for (let bj = 0; bj < 3; bj++) {
@@ -81,7 +94,8 @@ function planFor(look) {
   }
   const c = G / 2;
   slots.sort((a, b) => Math.hypot(a.x + 0.5 - c, a.y + 0.5 - c) - Math.hypot(b.x + 0.5 - c, b.y + 0.5 - c));
-  return { water, shore, landX, blocks, slots };
+  const plazaHouses = water && !(blocks.plaza[0] === 1 && blocks.plaza[1] === 1);
+  return { water, shore, landX, blocks, slots, plazaHouses };
 }
 
 // Lugares: edificio (caja), patio donde se queda la gente y adornos según el tipo.
@@ -131,7 +145,12 @@ export class Barrio {
       this.captionKey = '';
     });
     this.zoneEl.addEventListener('change', () => this.showZone(Number(this.zoneEl.value)));
-    root.querySelectorAll('[data-zoom]').forEach((b) => b.addEventListener('click', () => this.setZoom(this.zoom * (b.dataset.zoom === '+' ? 1.25 : 0.8))));
+    // Vistas fijas: todo el barrio o un acercamiento a las casas, el mercado o el trabajo.
+    this.camsEl = root.querySelector('.barrio-cams');
+    this.camsEl.addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cam]');
+      if (b) this.view(b.dataset.cam);
+    });
     // Arrastrar para mover la cámara; tocar a alguien para conocerlo.
     let drag = null;
     this.canvas.addEventListener('pointerdown', (e) => {
@@ -146,7 +165,9 @@ export class Barrio {
         const dy = ((e.clientY - drag.y) * this.dpr * 4) / this.tw;
         if (Math.abs(dx) + Math.abs(dy) > 0.15) drag.moved = true;
         // Pantalla → casillas: x − y cambia con el arrastre horizontal, x + y con el vertical.
-        this.setCenter(drag.center[0] - (dx + dy) / 2, drag.center[1] - (dy - dx) / 2);
+        const [mx, my] = this.mirror ? [-(dx - dy) / 2, -(dx + dy) / 2] : [-(dx + dy) / 2, -(dy - dx) / 2];
+        this.camTarget = null;
+        this.setCenter(drag.center[0] + mx, drag.center[1] + my);
       }
       this.canvas.style.cursor = drag?.moved ? 'grabbing' : this.hitAt(e) >= 0 ? 'pointer' : 'grab';
     });
@@ -160,7 +181,10 @@ export class Barrio {
     this.canvas.addEventListener('pointerleave', () => (this.mouse = null));
     new ResizeObserver(() => this.resize()).observe(this.canvas);
     const loop = () => {
-      if (this.active && this.trace && this.houses && !document.hidden) this.draw();
+      if (this.active && this.trace && this.houses && !document.hidden) {
+        this.moveCamera();
+        this.draw();
+      }
       requestAnimationFrame(loop);
     };
     requestAnimationFrame(loop);
@@ -243,6 +267,8 @@ export class Barrio {
     this.zoneEl.value = String(this.zone);
     const look = lookOf(t.city, this.zoneName);
     this.look = look;
+    setStreets(look.roads ?? [10, 20]);
+    this.mirror = !!look.mirror;
     this.plan = planFor(look);
     this.places = placesFor(look, this.plan);
     // Los hogares de la misma zona más cercanos a este; el del centro, en el centro del barrio.
@@ -253,7 +279,7 @@ export class Barrio {
       const r = (n) => hash(h.h, n);
       const stories = s.stilts ? 1 : s0 + Math.floor(r(1) * (s1 - s0 + 1));
       const roof = s.stilts ? 'zinc' : pick(look.houses.roofs, r(2));
-      return { ...s, home: h.h, members: h.members, stories, z: 0.62 + 0.5 * (stories - 1), roof, roofColor: roof === 'teja' ? shade(ROOF.teja, (r(3) - 0.5) * 0.3) : ROOF[roof], wall: pick(look.houses.colors, r(4)), cana: r(5) < (look.houses.cana ?? 0), tank: roof === 'losa' && r(6) < 0.55, skin: pick(SKIN, r(7)) };
+      return { ...s, home: h.h, members: h.members, stories, z: 0.62 + 0.5 * (stories - 1), roof, roofColor: roof === 'teja' ? pick(['#b4643c', '#a65a36', '#c0703f', '#9c4f30'], r(3)) : ROOF[roof], wall: pick(look.houses.colors, r(4)), cana: r(5) < (look.houses.cana ?? 0), tank: roof === 'losa' && r(6) < 0.55, skin: pick(SKIN, r(7)) };
     });
     this.people = [];
     this.byPerson = new Map();
@@ -287,7 +313,52 @@ export class Barrio {
     this.captionKey = '';
     this.zoom = 1;
     this.center = [G / 2, G / 2];
+    this.camTarget = null;
+    this.camName = 'todo';
+    this.renderCams();
     this.resize();
+  }
+
+  // Vistas: a dónde mira la cámara y con cuánto acercamiento.
+  cams() {
+    const pl = this.places;
+    const mid = (a) => [a.x + a.w / 2, a.y + a.h / 2];
+    const hs = this.houses.filter((h) => !h.stilts);
+    const homes = [hs.reduce((s, h) => s + h.x, 0) / hs.length + 0.5, hs.reduce((s, h) => s + h.y, 0) / hs.length + 1];
+    const near = hs.slice().sort((a, b) => Math.hypot(a.x - homes[0], a.y - homes[1]) - Math.hypot(b.x - homes[0], b.y - homes[1]))[0];
+    return {
+      todo: { label: 'Todo el barrio', zoom: 1, center: [G / 2, G / 2] },
+      casas: { label: 'Las casas', zoom: 1.8, center: [near.x + 0.5, near.y + 1] },
+      mercado: { label: pl.market.label, zoom: 1.8, center: mid(pl.market.area) },
+      trabajo: { label: pl.work.label, zoom: 1.7, center: mid(pl.work.area) },
+      colegio: { label: pl.school.label, zoom: 1.8, center: mid(pl.school.area) },
+    };
+  }
+
+  renderCams() {
+    const c = this.cams();
+    this.camsEl.innerHTML = Object.entries(c).map(([k, v]) => `<button type="button" data-cam="${k}" class="${k === this.camName ? 'on' : ''}">${v.label}</button>`).join('');
+  }
+
+  view(name) {
+    this.camName = name;
+    const c = this.cams()[name];
+    this.camTarget = { zoom: c.zoom, center: c.center };
+    this.camsEl.querySelectorAll('[data-cam]').forEach((b) => b.classList.toggle('on', b.dataset.cam === name));
+  }
+
+  // La cámara se acerca suave a la vista elegida.
+  moveCamera() {
+    const t = this.camTarget;
+    if (!t) return;
+    const k = 0.12;
+    const z = this.zoom + (t.zoom - this.zoom) * k;
+    const cx = this.center[0] + (t.center[0] - this.center[0]) * k;
+    const cy = this.center[1] + (t.center[1] - this.center[1]) * k;
+    const done = Math.abs(z - t.zoom) < 0.003 && Math.hypot(cx - t.center[0], cy - t.center[1]) < 0.02;
+    this.center = done ? t.center : [cx, cy];
+    this.setZoom(done ? t.zoom : z);
+    if (done) this.camTarget = null;
   }
 
   // Camino por las calles: de la casa a la calle más cercana, por la calle y, si hace falta, cruzando.
@@ -338,7 +409,7 @@ export class Barrio {
     }
     for (const s of plan.slots.slice(this.houses.length)) if (!s.stilts) out.push({ type: tree, x: s.x + 0.5, y: s.y + 0.7 });
     const p = this.places.plaza;
-    if (look.water) {
+    if (plan.plazaHouses) {
       // (sin plaza: ese espacio es de casas)
     } else if (look.plaza === 'parque') {
       for (let k = 0; k < 9; k++) out.push({ type: tree, x: p.x0 + 1 + (k % 3) * 3, y: p.y0 + 1 + Math.floor(k / 3) * 3 });
@@ -396,7 +467,7 @@ export class Barrio {
     const { width: W, height: H } = this.canvas;
     const fits = (x, y) => {
       for (const [sx, sy] of [[-W / 2, -H / 2], [W / 2, -H / 2], [-W / 2, H / 2], [W / 2, H / 2]]) {
-        const a = (sx * 2) / this.tw + x - y;
+        const a = (sx * 2) / this.tw + (this.mirror ? y - x : x - y);
         const b = (sy * 4) / this.tw + x + y;
         const gx = (a + b) / 2;
         const gy = (b - a) / 2;
@@ -409,13 +480,15 @@ export class Barrio {
     for (let k = 0; k < 30 && !fits(x, y); k++) [x, y] = [x + (G / 2 - x) * 0.25, y + (G / 2 - y) * 0.25];
     if (!fits(x, y)) [x, y] = [G / 2, G / 2];
     this.center = [x, y];
-    this.ox = W / 2 - ((x - y) * this.tw) / 2;
+    this.ox = W / 2 - ((this.mirror ? y - x : x - y) * this.tw) / 2;
     this.oy = H / 2 - ((x + y) * this.tw) / 4;
     this.groundAt = null;
   }
 
   // Casilla (x, y) a la altura z → píxel en pantalla.
+  // En los barrios "espejo" se intercambian x e y: el mismo dibujo visto desde el otro lado.
   P(x, y, z = 0) {
+    if (this.mirror) [x, y] = [y, x];
     return [this.ox + ((x - y) * this.tw) / 2, this.oy + ((x + y) * this.tw) / 4 - (z * this.tw) / 2];
   }
 
@@ -504,7 +577,7 @@ export class Barrio {
     const ma = pl.market.area;
     this.rect(ctx, ma.x, ma.y, ma.w, ma.h, '#c7b79a');
     const p = pl.plaza;
-    if (look.water) {
+    if (this.plan.plazaHouses) {
       // Sin plaza: ahí hay casas.
     } else if (look.plaza === 'cancha') {
       this.rect(ctx, p.x0 + 0.5, p.y0 + 0.5, p.x1 - p.x0 - 1, p.y1 - p.y0 - 1, '#b8a06a');
@@ -531,16 +604,66 @@ export class Barrio {
         this.rect(ctx, hs.x + 0.5, hs.y + 1.05, Math.max(0.5, toShore), 0.32, '#8a6a45');
       }
     }
+    // Sombras de los edificios (el sol viene de la izquierda) y textura del suelo.
+    const shadow = (x, y, w, h, z) => this.rect(ctx, x + 0.12, y + 0.08, w + 0.42 * z, h + 0.06, 'rgba(0, 0, 0, 0.2)');
+    for (const hs of this.houses) if (!hs.stilts) shadow(hs.x, hs.y, 1, 1, hs.z);
+    for (const pl2 of [this.places.school, this.places.work]) shadow(pl2.box.x, pl2.box.y, pl2.box.w, pl2.box.h, pl2.box.z);
+    if (!this.noise) {
+      const n = document.createElement('canvas');
+      n.width = n.height = 128;
+      const nctx = n.getContext('2d');
+      const img = nctx.createImageData(128, 128);
+      for (let k = 0; k < img.data.length; k += 4) {
+        const v = hash(k, 5) * 255;
+        img.data[k] = img.data[k + 1] = img.data[k + 2] = v;
+        img.data[k + 3] = 22;
+      }
+      nctx.putImageData(img, 0, 0);
+      this.noise = n;
+    }
+    ctx.fillStyle = ctx.createPattern(this.noise, 'repeat');
+    ctx.globalCompositeOperation = 'overlay';
+    ctx.fillRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'source-over';
+    // Luz de la tarde: un poco más clara arriba a la izquierda, más oscura en las esquinas.
+    const v = ctx.createRadialGradient(w * 0.35, h * 0.3, 0, w * 0.5, h * 0.5, Math.max(w, h) * 0.75);
+    v.addColorStop(0, 'rgba(255, 240, 210, 0.06)');
+    v.addColorStop(1, 'rgba(0, 0, 0, 0.28)');
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, w, h);
     this.groundCanvas = bg;
     this.groundAt = `${this.ox},${this.oy},${this.tw},${w},${h}`;
   }
 
   // ---------- Dibujos ----------
   // Caja isométrica con techo a cuatro aguas (teja), plano (losa) o de una caída (zinc).
-  box(ctx, { x, y, w, h, z }, wall, roofColor, roofType = 'losa', base = 0) {
+  box(ctx, { x, y, w, h, z }, wall, roofColor, roofType = 'losa', base = 0, opts = {}) {
     const P = (a, b, c) => this.P(a, b, c);
-    this.poly(ctx, [P(x + w, y, base), P(x + w, y + h, base), P(x + w, y + h, base + z), P(x + w, y, base + z)], shade(wall, -0.22));
-    this.poly(ctx, [P(x, y + h, base), P(x + w, y + h, base), P(x + w, y + h, base + z), P(x, y + h, base + z)], wall);
+    // Paredes con luz: más claras arriba y más oscuras junto al piso (como la sombra real del suelo).
+    const face = (pts, color, dark) => {
+      const top = Math.min(...pts.map((q) => q[1]));
+      const bottom = Math.max(...pts.map((q) => q[1]));
+      const g = this.ctx.createLinearGradient(0, top, 0, bottom);
+      g.addColorStop(0, shade(color, dark + 0.06));
+      g.addColorStop(1, shade(color, dark - 0.16));
+      this.poly(ctx, pts, g);
+    };
+    face([P(x + w, y, base), P(x + w, y + h, base), P(x + w, y + h, base + z), P(x + w, y, base + z)], wall, -0.24);
+    face([P(x, y + h, base), P(x + w, y + h, base), P(x + w, y + h, base + z), P(x, y + h, base + z)], wall, 0);
+    // Hiladas de bloque: líneas finas que dan textura a la pared.
+    if (opts.texture && this.tw > 40) {
+      ctx.strokeStyle = 'rgba(0, 0, 0, 0.07)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      for (let k = 0.14; k < z; k += 0.14) {
+        ctx.moveTo(...P(x, y + h, base + k));
+        ctx.lineTo(...P(x + w, y + h, base + k));
+        ctx.lineTo(...P(x + w, y, base + k));
+      }
+      ctx.stroke();
+    }
+    // Arista iluminada en la esquina.
+    this.line(ctx, P(x + w, y + h, base), P(x + w, y + h, base + z), 'rgba(255, 255, 255, 0.18)', Math.max(1, this.tw * 0.012));
     const Z = base + z;
     const e = 0.08;
     const [x0, y0, x1, y1] = [x - e, y - e, x + w + e, y + h + e];
@@ -548,23 +671,45 @@ export class Barrio {
       const top = P(x + w / 2, y + h / 2, Z + 0.45 * Math.min(w, h));
       this.poly(ctx, [P(x0, y0, Z), P(x1, y0, Z), top], shade(roofColor, -0.1));
       this.poly(ctx, [P(x0, y0, Z), P(x0, y1, Z), top], shade(roofColor, -0.05));
-      this.poly(ctx, [P(x1, y0, Z), P(x1, y1, Z), top], shade(roofColor, -0.3));
-      this.poly(ctx, [P(x0, y1, Z), P(x1, y1, Z), top], shade(roofColor, 0.08));
+      this.poly(ctx, [P(x1, y0, Z), P(x1, y1, Z), top], shade(roofColor, -0.32));
+      this.poly(ctx, [P(x0, y1, Z), P(x1, y1, Z), top], shade(roofColor, 0.1));
+      // Filas de tejas.
+      if (this.tw > 40) {
+        ctx.strokeStyle = 'rgba(60, 20, 10, 0.25)';
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        for (let k = 1; k < 4; k++) {
+          const f = k / 4;
+          const a = P(x0 + (x + w / 2 - x0) * f, y1 + (y + h / 2 - y1) * f, Z + 0.45 * Math.min(w, h) * f);
+          const b = P(x1 + (x + w / 2 - x1) * f, y1 + (y + h / 2 - y1) * f, Z + 0.45 * Math.min(w, h) * f);
+          ctx.moveTo(...a);
+          ctx.lineTo(...b);
+        }
+        ctx.stroke();
+      }
     } else if (roofType === 'zinc') {
-      // Una caída hacia adelante, con las ondas de la plancha.
+      // Una caída hacia adelante, con las ondas de la plancha y algo de óxido.
       this.poly(ctx, [P(x1, y0, Z + 0.22), P(x1, y1, Z), P(x1, y1, Z - 0.03), P(x1, y0, Z + 0.19)], shade(roofColor, -0.3));
-      this.poly(ctx, [P(x0, y0, Z + 0.22), P(x1, y0, Z + 0.22), P(x1, y1, Z), P(x0, y1, Z)], roofColor);
-      ctx.strokeStyle = shade(roofColor, -0.15);
+      const a = P(x0, y0, Z + 0.22);
+      const b = P(x1, y1, Z);
+      const g = this.ctx.createLinearGradient(a[0], a[1], b[0], b[1]);
+      g.addColorStop(0, shade(roofColor, 0.12));
+      g.addColorStop(1, shade(roofColor, -0.12));
+      this.poly(ctx, [a, P(x1, y0, Z + 0.22), b, P(x0, y1, Z)], g);
+      ctx.strokeStyle = shade(roofColor, -0.2);
       ctx.lineWidth = Math.max(0.5, this.tw * 0.012);
       ctx.beginPath();
-      for (let k = 1; k < 6; k++) {
-        const u = x0 + ((x1 - x0) * k) / 6;
+      for (let k = 1; k < 8; k++) {
+        const u = x0 + ((x1 - x0) * k) / 8;
         ctx.moveTo(...P(u, y0, Z + 0.22));
         ctx.lineTo(...P(u, y1, Z));
       }
       ctx.stroke();
+      if (opts.rust) this.poly(ctx, [P(x0 + 0.1, y1 - 0.3, Z + 0.06), P(x0 + 0.45, y1 - 0.3, Z + 0.06), P(x0 + 0.45, y1, Z), P(x0 + 0.1, y1, Z)], 'rgba(150, 80, 40, 0.35)');
     } else {
       this.poly(ctx, [P(x0, y0, Z), P(x1, y0, Z), P(x1, y1, Z), P(x0, y1, Z)], roofColor);
+      // Manchas de humedad en la losa.
+      this.poly(ctx, [P(x0 + 0.15, y0 + 0.2, Z), P(x0 + 0.5, y0 + 0.2, Z), P(x0 + 0.5, y0 + 0.55, Z), P(x0 + 0.15, y0 + 0.55, Z)], 'rgba(0, 0, 0, 0.06)');
       this.poly(ctx, [P(x0, y1, Z), P(x1, y1, Z), P(x1, y1, Z + 0.08), P(x0, y1, Z + 0.08)], shade(roofColor, 0.12));
       this.poly(ctx, [P(x1, y0, Z), P(x1, y1, Z), P(x1, y1, Z + 0.08), P(x1, y0, Z + 0.08)], shade(roofColor, -0.15));
     }
@@ -593,7 +738,7 @@ export class Barrio {
       for (const [sx, sy] of [[0.1, 1], [0.9, 1], [0.9, 0.1]]) this.line(ctx, this.P(hs.x + sx, hs.y + sy, -0.15), this.P(hs.x + sx, hs.y + sy, base), '#6b4f33', Math.max(1, this.tw * 0.03));
       this.rect(ctx, hs.x - 0.05, hs.y + 1, 1.1, 0.7, '#8a6a45', base);
     }
-    this.box(ctx, b, hs.wall, hs.roofColor, hs.roof, base);
+    this.box(ctx, b, hs.wall, hs.roofColor, hs.roof, base, { texture: !hs.cana, rust: hash(hs.home, 21) < 0.5 });
     if (hs.cana) {
       ctx.strokeStyle = shade(hs.wall, -0.25);
       ctx.lineWidth = Math.max(0.5, this.tw * 0.012);
@@ -606,7 +751,10 @@ export class Barrio {
     }
     const glass = night > 0.3 ? `rgba(255, 214, 120, ${0.5 + 0.5 * night})` : '#33485c';
     this.pane(ctx, 'y', b, 0.38, 0.62, 0, 0.46, '#6b4a33', base);
-    for (const [f, a0, a1, z0, z1] of this.windowsOf(hs)) this.pane(ctx, f, b, a0, a1, z0, z1, glass, base);
+    for (const [f, a0, a1, z0, z1] of this.windowsOf(hs)) {
+      this.pane(ctx, f, b, a0 - 0.03, a1 + 0.03, z0 - 0.03, z1 + 0.03, 'rgba(240, 235, 225, 0.75)', base);
+      this.pane(ctx, f, b, a0, a1, z0, z1, glass, base);
+    }
     if (hs.tank) {
       // Tanque de agua azul en la losa, típico de la costa.
       const [tx, ty] = this.P(hs.x + 0.3, hs.y + 0.3, base + hs.z + 0.05);
@@ -634,50 +782,99 @@ export class Barrio {
   drawTree(ctx, d, now) {
     const [bx, by] = this.P(d.x, d.y);
     const tw = this.tw;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+    const sh = ctx.createRadialGradient(bx + tw * 0.15, by, 0, bx + tw * 0.15, by, tw * 0.45);
+    sh.addColorStop(0, 'rgba(0, 0, 0, 0.28)');
+    sh.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = sh;
     ctx.beginPath();
-    ctx.ellipse(bx, by, tw * 0.22, tw * 0.09, 0, 0, Math.PI * 2);
+    ctx.ellipse(bx + tw * 0.15, by, tw * 0.45, tw * 0.18, 0, 0, Math.PI * 2);
     ctx.fill();
+    const sway = Math.sin(now / 1400 + d.x) * tw * 0.03;
     if (d.type === 'palma') {
-      const [tx, ty] = this.P(d.x, d.y, 1.5);
-      const sway = Math.sin(now / 1400 + d.x) * tw * 0.04;
-      ctx.strokeStyle = '#7a5a3a';
-      ctx.lineWidth = tw * 0.07;
+      const [tx, ty] = this.P(d.x, d.y, 1.7);
+      ctx.strokeStyle = '#8a6a48';
+      ctx.lineWidth = tw * 0.075;
+      ctx.lineCap = 'round';
       ctx.beginPath();
       ctx.moveTo(bx, by);
-      ctx.quadraticCurveTo(bx + tw * 0.08, (by + ty) / 2, tx + sway, ty);
+      ctx.quadraticCurveTo(bx + tw * 0.1, (by + ty) / 2, tx + sway, ty);
       ctx.stroke();
-      ctx.fillStyle = '#3f8a4a';
-      for (let k = 0; k < 6; k++) {
-        const a = (k / 6) * Math.PI * 2 + 0.3;
+      // Anillos del tronco.
+      ctx.strokeStyle = 'rgba(60, 40, 20, 0.35)';
+      ctx.lineWidth = 1;
+      for (let k = 1; k < 6; k++) {
+        const f = k / 6;
+        const yy = by + (ty - by) * f;
+        const xx = bx + (tx + sway - bx) * f + tw * 0.04 * Math.sin(f * Math.PI);
         ctx.beginPath();
-        ctx.ellipse(tx + sway + Math.cos(a) * tw * 0.18, ty + Math.sin(a) * tw * 0.07, tw * 0.2, tw * 0.055, a, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.moveTo(xx - tw * 0.035, yy);
+        ctx.lineTo(xx + tw * 0.035, yy);
+        ctx.stroke();
       }
+      // Hojas: arcos que caen, con un lado más claro.
+      for (let k = 0; k < 8; k++) {
+        const a = (k / 8) * Math.PI * 2 + 0.2;
+        const ex = tx + sway + Math.cos(a) * tw * 0.42;
+        const ey = ty + Math.sin(a) * tw * 0.16 + tw * 0.12;
+        ctx.strokeStyle = k % 2 ? '#2f6b34' : '#4b8f43';
+        ctx.lineWidth = tw * 0.06;
+        ctx.beginPath();
+        ctx.moveTo(tx + sway, ty);
+        ctx.quadraticCurveTo(tx + sway + Math.cos(a) * tw * 0.25, ty - tw * 0.12, ex, ey);
+        ctx.stroke();
+      }
+      ctx.fillStyle = '#5a4a2a';
+      ctx.beginPath();
+      ctx.arc(tx + sway, ty + tw * 0.03, tw * 0.05, 0, Math.PI * 2);
+      ctx.fill();
     } else {
-      const [tx, ty] = this.P(d.x, d.y, 0.9);
-      ctx.strokeStyle = '#6b4f33';
-      ctx.lineWidth = tw * 0.07;
+      const [tx, ty] = this.P(d.x, d.y, 1);
+      ctx.strokeStyle = '#5e4630';
+      ctx.lineWidth = tw * 0.08;
       ctx.beginPath();
       ctx.moveTo(bx, by);
       ctx.lineTo(tx, ty);
       ctx.stroke();
-      for (const [dx, dy, r, c] of [[0, -0.05, 0.32, '#3f7d3c'], [-0.12, 0.02, 0.22, '#4a8a45'], [0.14, 0, 0.22, '#356f33']]) {
+      // Copa en varias capas: sombra abajo a la derecha, luz arriba a la izquierda.
+      const blobs = [[0.1, 0.05, 0.36, '#2c5a2a'], [-0.14, -0.02, 0.28, '#356b31'], [0.16, -0.08, 0.26, '#2f6230'], [0, -0.16, 0.3, '#3f7d3a'], [-0.08, -0.22, 0.2, '#5a9a4c']];
+      for (const [dx, dy, r, c] of blobs) {
         ctx.fillStyle = c;
         ctx.beginPath();
-        ctx.arc(tx + dx * tw, ty + dy * tw, r * tw, 0, Math.PI * 2);
+        ctx.arc(tx + dx * tw + sway, ty + dy * tw, r * tw, 0, Math.PI * 2);
         ctx.fill();
       }
     }
   }
 
+  // Bote con casco en punta, borda clara y, en los grandes, cabina y mástil.
   drawBoat(ctx, d, now) {
     const bob = d.beached ? 0 : Math.sin(now / 700 + d.y) * 0.04;
-    const L = d.big ? 2.2 : 1.1;
-    const b = { x: d.x, y: d.y, w: d.big ? 0.8 : 0.45, h: L, z: d.big ? 0.35 : 0.18 };
-    this.box(ctx, b, d.big ? '#7a2e2e' : d.color, d.yate ? '#f4f4f4' : '#8a6a45', 'losa', bob);
-    if (d.big || d.yate) this.box(ctx, { x: d.x + 0.12, y: d.y + L * 0.55, w: b.w - 0.24, h: L * 0.3, z: d.big ? 0.45 : 0.18 }, '#f4f4f4', '#dfe7ec', 'losa', bob + b.z);
-    if (d.big) this.line(ctx, this.P(d.x + 0.4, d.y + 0.5, bob + b.z), this.P(d.x + 0.4, d.y + 0.5, bob + b.z + 1.1), '#3a3f47', Math.max(1, this.tw * 0.03));
+    const L = d.big ? 2.4 : 1.2;
+    const w = d.big ? 0.8 : 0.42;
+    const hz = d.big ? 0.32 : 0.16;
+    const { x, y } = d;
+    const outline = (z) => [this.P(x, y, z), this.P(x + w, y, z), this.P(x + w, y + L * 0.72, z), this.P(x + w / 2, y + L, z), this.P(x, y + L * 0.72, z)];
+    const hull = d.big ? '#7a2e2e' : d.color;
+    if (!d.beached) this.poly(ctx, outline(-0.02).map(([a, b2]) => [a, b2 + this.tw * 0.04]), 'rgba(255, 255, 255, 0.18)');
+    const lo = outline(bob);
+    const hi = outline(bob + hz);
+    // Costados visibles: el de la derecha y los dos de la proa.
+    this.poly(ctx, [lo[1], lo[2], hi[2], hi[1]], shade(hull, -0.3));
+    this.poly(ctx, [lo[2], lo[3], hi[3], hi[2]], shade(hull, -0.12));
+    this.poly(ctx, [lo[3], lo[4], hi[4], hi[3]], hull);
+    this.poly(ctx, hi, d.yate ? '#f4f4f4' : '#9a7650');
+    ctx.strokeStyle = '#f4efe2';
+    ctx.lineWidth = Math.max(1, this.tw * 0.02);
+    ctx.beginPath();
+    hi.forEach(([a, b2], k) => (k ? ctx.lineTo(a, b2) : ctx.moveTo(a, b2)));
+    ctx.closePath();
+    ctx.stroke();
+    if (d.big || d.yate) this.box(ctx, { x: x + 0.12, y: y + L * 0.2, w: w - 0.24, h: L * 0.3, z: d.big ? 0.5 : 0.2 }, '#f4f4f4', '#dfe7ec', 'losa', bob + hz);
+    if (d.big) this.line(ctx, this.P(x + w / 2, y + L * 0.6, bob + hz), this.P(x + w / 2, y + L * 0.6, bob + hz + 1.2), '#3a3f47', Math.max(1, this.tw * 0.03));
+    else if (!d.yate) {
+      // Motor fuera de borda.
+      this.box(ctx, { x: x + w * 0.3, y: y - 0.12, w: w * 0.4, h: 0.14, z: 0.18 }, '#2f3b52', '#2f3b52', 'losa', bob + 0.05);
+    }
   }
 
   drawCar(ctx, d) {
@@ -818,69 +1015,126 @@ export class Barrio {
     return this.along(p.route, (phase - B) / travel, true);
   }
 
+  // Figura con proporciones de persona (cabeza chica, piernas largas), luz desde la izquierda y sombra suave.
   drawPerson(ctx, p, pos, state, now) {
     const [sx, sy] = this.P(pos.x, pos.y);
     const s = p.scale;
-    const u = this.tw * 0.1 * s;
+    const u = this.tw * 0.085 * s;
     const zombie = this.zombie && state === 2;
     const skin = zombie ? ZOMBIE_SKIN : p.skin;
-    const swing = pos.walking ? Math.sin(now * (zombie ? 0.006 : 0.012) + p.j1 * 10) * u * 0.45 : 0;
-    const lean = zombie ? u * 0.35 * pos.dir : 0;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.28)';
+    const t = now * (zombie ? 0.005 : 0.011) + p.j1 * 10;
+    const swing = pos.walking ? Math.sin(t) * u * 0.5 : 0;
+    const bob = pos.walking ? Math.abs(Math.cos(t)) * u * 0.12 : 0;
+    const lean = zombie ? u * 0.45 * pos.dir : 0;
+    const y0 = sy - bob;
+    // Sombra en el piso.
+    const sh = ctx.createRadialGradient(sx, sy, 0, sx, sy, u * 1.6);
+    sh.addColorStop(0, 'rgba(0, 0, 0, 0.35)');
+    sh.addColorStop(1, 'rgba(0, 0, 0, 0)');
+    ctx.fillStyle = sh;
     ctx.beginPath();
-    ctx.ellipse(sx, sy, u * 1.3, u * 0.55, 0, 0, Math.PI * 2);
+    ctx.ellipse(sx, sy, u * 1.6, u * 0.62, 0, 0, Math.PI * 2);
     ctx.fill();
     ctx.lineCap = 'round';
+    // Piernas y zapatos.
+    const hipY = y0 - u * 2.5;
     ctx.strokeStyle = p.pants;
-    ctx.lineWidth = u * 0.5;
+    ctx.lineWidth = u * 0.52;
     ctx.beginPath();
-    ctx.moveTo(sx - u * 0.3, sy - u * 1.6);
-    ctx.lineTo(sx - u * 0.3 + swing, sy - u * 0.15);
-    ctx.moveTo(sx + u * 0.3, sy - u * 1.6);
-    ctx.lineTo(sx + u * 0.3 - swing, sy - u * 0.15);
+    ctx.moveTo(sx - u * 0.28, hipY);
+    ctx.lineTo(sx - u * 0.3 + swing, y0 - u * 0.25);
+    ctx.moveTo(sx + u * 0.28, hipY);
+    ctx.lineTo(sx + u * 0.3 - swing, y0 - u * 0.25);
     ctx.stroke();
-    ctx.fillStyle = zombie ? shade(p.shirt, -0.35) : p.shirt;
-    ctx.beginPath();
-    ctx.roundRect(sx - u * 0.72 + lean * 0.5, sy - u * 3.2, u * 1.44, u * 1.8, u * 0.45);
-    ctx.fill();
-    // Brazos: los zombis los llevan estirados hacia adelante.
-    ctx.strokeStyle = skin;
-    ctx.lineWidth = u * 0.4;
-    ctx.beginPath();
-    if (zombie) {
-      for (const k of [-1, 1]) {
-        ctx.moveTo(sx + k * u * 0.6 + lean, sy - u * 2.8);
-        ctx.lineTo(sx + k * u * 0.3 + pos.dir * u * 1.5 + lean, sy - u * 2.7 + k * u * 0.15);
-      }
-    } else {
-      ctx.moveTo(sx - u * 0.75, sy - u * 2.9);
-      ctx.lineTo(sx - u * 0.95 - swing * 0.6, sy - u * 1.75);
-      ctx.moveTo(sx + u * 0.75, sy - u * 2.9);
-      ctx.lineTo(sx + u * 0.95 + swing * 0.6, sy - u * 1.75);
+    ctx.fillStyle = '#1b1712';
+    for (const k of [-1, 1]) {
+      ctx.beginPath();
+      ctx.ellipse(sx + k * u * 0.3 - k * swing, y0 - u * 0.12, u * 0.32, u * 0.16, 0, 0, Math.PI * 2);
+      ctx.fill();
     }
-    ctx.stroke();
+    // Torso con volumen.
+    const tx = sx + lean * 0.5;
+    const torsoTop = y0 - u * 4.25;
+    const g = ctx.createLinearGradient(tx - u * 0.8, 0, tx + u * 0.8, 0);
+    const shirt = zombie ? shade(p.shirt, -0.45) : p.shirt;
+    g.addColorStop(0, shade(shirt, 0.18));
+    g.addColorStop(1, shade(shirt, -0.28));
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.roundRect(tx - u * 0.72, torsoTop, u * 1.44, u * 1.95, [u * 0.5, u * 0.5, u * 0.22, u * 0.22]);
+    ctx.fill();
+    if (zombie) {
+      // Ropa rota y manchada.
+      ctx.fillStyle = '#5a0f0f';
+      ctx.beginPath();
+      ctx.arc(tx + u * 0.2, torsoTop + u * 0.9, u * 0.28, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.moveTo(tx - u * 0.7, torsoTop + u * 1.95);
+      for (let k = 0; k <= 6; k++) ctx.lineTo(tx - u * 0.7 + (k * u * 1.4) / 6, torsoTop + u * (k % 2 ? 1.7 : 1.95));
+      ctx.fill();
+    }
+    // Brazos: manga, antebrazo y mano. Los zombis los llevan estirados hacia adelante.
+    const shoulderY = torsoTop + u * 0.35;
+    const arm = (k, hx, hy) => {
+      const sx0 = tx + k * u * 0.66;
+      const mx = (sx0 + hx) / 2;
+      const my = (shoulderY + hy) / 2;
+      ctx.lineWidth = u * 0.36;
+      ctx.strokeStyle = shirt;
+      ctx.beginPath();
+      ctx.moveTo(sx0, shoulderY);
+      ctx.lineTo(mx, my);
+      ctx.stroke();
+      ctx.lineWidth = u * 0.28;
+      ctx.strokeStyle = skin;
+      ctx.beginPath();
+      ctx.moveTo(mx, my);
+      ctx.lineTo(hx, hy);
+      ctx.stroke();
+      ctx.fillStyle = skin;
+      ctx.beginPath();
+      ctx.arc(hx, hy, u * 0.17, 0, Math.PI * 2);
+      ctx.fill();
+    };
+    if (zombie) for (const k of [-1, 1]) arm(k, tx + k * u * 0.25 + pos.dir * u * 1.7, shoulderY + u * 0.15 + k * u * 0.12);
+    else for (const k of [-1, 1]) arm(k, tx + k * u * 0.85 + k * swing * 0.35 * (k > 0 ? 1 : -1), shoulderY + u * 1.75);
+    // Cuello, cabeza y pelo.
     const hx = sx + lean;
-    const hy = sy - u * 3.85;
+    const hy = torsoTop - u * 0.62;
+    ctx.fillStyle = shade(skin, -0.15);
+    ctx.fillRect(hx - u * 0.16, torsoTop - u * 0.25, u * 0.32, u * 0.3);
     if (p.who.female && p.who.age >= 6 && !zombie) {
       ctx.fillStyle = p.hair;
       ctx.beginPath();
-      ctx.roundRect(hx - u * 0.68, hy - u * 0.3, u * 1.36, u * 1.05, u * 0.3);
+      ctx.roundRect(hx - u * 0.52, hy - u * 0.2, u * 1.04, u * 1.1, u * 0.3);
       ctx.fill();
     }
-    ctx.fillStyle = skin;
+    const hg = ctx.createRadialGradient(hx - u * 0.18, hy - u * 0.2, u * 0.05, hx, hy, u * 0.55);
+    hg.addColorStop(0, shade(skin, 0.15));
+    hg.addColorStop(1, shade(skin, -0.2));
+    ctx.fillStyle = hg;
     ctx.beginPath();
-    ctx.arc(hx, hy, u * 0.62, 0, Math.PI * 2);
+    ctx.ellipse(hx, hy, u * 0.44, u * 0.5, 0, 0, Math.PI * 2);
     ctx.fill();
-    ctx.fillStyle = zombie ? '#4b5a3c' : p.hair;
+    ctx.fillStyle = zombie ? '#3e4a33' : p.hair;
     ctx.beginPath();
-    ctx.arc(hx, hy - u * 0.08, u * 0.64, Math.PI * 1.05, Math.PI * 1.95);
+    ctx.ellipse(hx, hy - u * 0.18, u * 0.47, u * 0.36, 0, Math.PI, Math.PI * 2);
     ctx.fill();
-    if (zombie) {
-      ctx.fillStyle = '#ff2b2b';
-      ctx.fillRect(hx - u * 0.32, hy, u * 0.18, u * 0.18);
-      ctx.fillRect(hx + u * 0.14, hy, u * 0.18, u * 0.18);
+    if (this.tw > 60) {
+      ctx.fillStyle = zombie ? '#ff2b2b' : '#1b1712';
+      ctx.fillRect(hx - u * 0.2 + pos.dir * u * 0.06, hy - u * 0.02, u * 0.1, u * 0.1);
+      ctx.fillRect(hx + u * 0.1 + pos.dir * u * 0.06, hy - u * 0.02, u * 0.1, u * 0.1);
     }
-    return { sx, sy, top: sy - u * 4.6, u };
+    if (zombie) {
+      // Un leve resplandor verde: se distinguen de lejos.
+      ctx.fillStyle = 'rgba(120, 255, 90, 0.12)';
+      ctx.beginPath();
+      ctx.ellipse(hx, hy + u * 1.5, u * 1.3, u * 2.4, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    return { sx, sy, top: hy - u * 0.7, u: u * 1.12 };
   }
 
   // El rombo sobre la cabeza: el color es el estado del día.
