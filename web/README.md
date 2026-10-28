@@ -1,13 +1,13 @@
 # web/ — la página
 
-Todo lo que ve la persona. No usa frameworks: HTML, CSS y JavaScript con módulos. Chart.js llega por CDN para las gráficas.
+Todo lo que ve la persona. No usa frameworks: HTML, CSS y JavaScript con módulos. Chart.js (gráficas) y GSAP (animación de los textos de la historia) llegan por CDN, con su huella de integridad.
 
 | Archivo | Qué hace |
 |---|---|
 | `index.html` | La página: la historia, la pantalla "Preparar" y la pantalla "El plan". |
 | `styles.css` | Todos los estilos. Arriba están los colores de cada brote (zombi, gripe, dengue). |
 | `app.js` | Archivo principal: une todo, lee el formulario, lanza el cálculo y muestra el resultado. |
-| `historia.js` | La película del principio: 8 imágenes que avanzan con el scroll y terminan en el simulador. |
+| `historia.js` | La película del principio: 8 escenas que avanzan con el scroll como capítulos (corte de entrada, texto animado con GSAP, corte de salida) y terminan en el simulador. |
 | `escenarios.js` | Los tres brotes (zombi, gripe fuerte, dengue): enfermedad, textos e imagen de cada uno. |
 | `barrio.js` | "El barrio": la vista estilo Sims con casas, personas, bus, día y noche. |
 | `zonas.js` | Cómo es cada parroquia de Manta en el barrio (mar, puerto, tipo de casas, calles). |

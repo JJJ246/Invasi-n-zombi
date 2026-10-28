@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <!-- Seguridad: solo se cargan scripts de este sitio y de cdnjs (Chart.js, con su huella); la API de AWS es la única conexión externa. -->
+  <!-- Seguridad: solo se cargan scripts de este sitio y de cdnjs (GSAP y Chart.js, cada uno con su huella); la API de AWS es la única conexión externa. -->
   <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com; worker-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; media-src 'self'; connect-src 'self' https://*.execute-api.us-east-1.amazonaws.com; object-src 'none'; base-uri 'self'; form-action 'self'">
   <meta name="referrer" content="strict-origin-when-cross-origin">
   <link rel="icon" href="favicon.svg" type="image/svg+xml">
@@ -14,7 +14,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Creepster&family=Special+Elite&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="preload" as="image" href="img/historia/1_bahia.webp" fetchpriority="high">
   <link rel="stylesheet" href="styles.css">
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw==" crossorigin="anonymous" referrerpolicy="no-referrer" defer></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.13.0/gsap.min.js" integrity="sha512-NcZdtrT77bJr4STcmsGAESr06BYGE8woZdSdEgqnpyqac7sugNO+Tr4bGwGF3MsnEkGKhU2KL2xh6Ec+BqsaHA==" crossorigin="anonymous" referrerpolicy="no-referrer" async></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" integrity="sha512-CQBWl4fJHWbryGE+Pc7UAxWMUMNMWzWxF4SQo9CgkJIN1kx6djDQZjh3Y8SZ1d+6I+1zze6Z7kHXO7q3UyZAWw==" crossorigin="anonymous" referrerpolicy="no-referrer" async></script>
   <script src="config.js"></script>
   <script type="module" src="app.js"></script>
 </head>
@@ -76,15 +77,16 @@
   <section class="film" id="historia" aria-label="Historia: una noche en Manta">
     <div class="film-sticky">
       <canvas id="filmCanvas"></canvas>
+      <!-- Un texto por escena. historia.js lo anima letra por letra con GSAP según data-anim y lo ubica según data-pos. -->
       <div class="captions">
-        <p class="cap" data-from="0" data-to="0.115"><span class="time">31 de octubre, 23:47</span>Manta duerme. Los barcos atuneros se mecen en la bahía.</p>
-        <p class="cap" data-from="0.13" data-to="0.24"><span class="time">Mercado de Tarqui</span>Alguien muerde a alguien.<br><b>Nadie lo nota.</b></p>
-        <p class="cap" data-from="0.255" data-to="0.365"><span class="time">Si nadie hace nada</span>Casa, bus, colegio, mercado.<br>Uno de cada tres habitantes termina <b class="red">mordido</b>.</p>
-        <p class="cap" data-from="0.38" data-to="0.49"><span class="time">Comité de Contención</span>No hay vacunas para todos. No se puede cerrar la ciudad.<br>Solo se ven los casos reportados.</p>
-        <p class="cap" data-from="0.505" data-to="0.615"><span class="time">El plan</span>Aislar la casa de cada caso. Vacunar primero a su entorno.<br>Cerrar o fumigar <b>solo donde hace falta</b>.</p>
-        <p class="cap" data-from="0.63" data-to="0.74"><span class="time">Día 120, con el plan</span><b class="green">79.000 personas</b> que no fueron mordidas.</p>
-        <p class="cap" data-from="0.755" data-to="0.865"><span class="time">Amanece</span>Manta sigue en pie.</p>
-        <p class="cap final" data-from="0.88" data-to="0.97"><span class="time">Ahora decides tú</span>Elige el brote. El Comité calcula el mejor plan.</p>
+        <div class="cap" data-pos="abajo" data-anim="sube"><span class="time">31 de octubre · 23:47</span><h2 class="hl">Manta duerme</h2><p class="sub">Los barcos atuneros se mecen en la bahía.</p></div>
+        <div class="cap" data-pos="centro" data-anim="tiembla"><span class="time">Mercado de Tarqui</span><h2 class="hl">Alguien muerde a alguien</h2><p class="sub">Nadie lo nota.</p></div>
+        <div class="cap" data-pos="abajo" data-anim="cae"><span class="time">Si nadie hace nada</span><h2 class="hl">Casa. Bus. Colegio. Mercado.</h2><p class="sub">Uno de cada tres habitantes termina <b class="red">mordido</b>.</p></div>
+        <div class="cap" data-pos="arriba" data-anim="escribe"><span class="time">Comité de Contención</span><h2 class="hl">No hay vacunas para todos</h2><p class="sub">No se puede cerrar la ciudad. Solo se ven los casos reportados.</p></div>
+        <div class="cap" data-pos="centro" data-anim="cae"><span class="time">El plan</span><h2 class="hl">Aislar. Vacunar. Fumigar.</h2><p class="sub">Primero el entorno de cada caso, y <b>solo donde hace falta</b>.</p></div>
+        <div class="cap" data-pos="centro" data-anim="tiembla"><span class="time">Día 120, con el plan</span><h2 class="hl green">79.000 a salvo</h2><p class="sub">personas que no fueron mordidas.</p></div>
+        <div class="cap" data-pos="abajo" data-anim="sube"><span class="time">Amanece</span><h2 class="hl">Manta sigue en pie</h2></div>
+        <div class="cap final" data-pos="centro" data-anim="cae"><span class="time">Ahora decides tú</span><h2 class="hl">Elige el brote</h2><p class="sub">El Comité calcula el mejor plan.</p></div>
       </div>
       <div class="film-ui">
         <div class="film-progress"><b id="filmBar"></b></div>
@@ -108,6 +110,7 @@
         </ul>
       </div>
 
+      <!-- "Calcular" empieza desactivado: app.js lo activa cuando está listo, así el formulario nunca se envía solo. -->
       <form id="controls" class="setup" autocomplete="off" novalidate>
         <section class="step">
           <h2 class="step-title"><span class="num">1</span>¿Qué brote?</h2>
@@ -149,7 +152,7 @@
         </section>
 
         <div class="run">
-          <button type="submit" class="primary" id="runBtn"><svg class="ic"><use href="#i-play"/></svg>Calcular el mejor plan</button>
+          <button type="submit" class="primary" id="runBtn" disabled><svg class="ic"><use href="#i-play"/></svg>Calcular el mejor plan</button>
           <label class="seed">Semilla <input type="number" name="seed" min="0" max="4294967295" step="1"></label>
           <span id="status" class="status" aria-live="polite">Corre en tu navegador, en segundos.</span>
           <label class="check" id="cloudRow" hidden><input type="checkbox" id="useCloud" checked> Calcular en AWS</label>
@@ -336,8 +339,13 @@
 
   <p class="toast" id="toast" role="alert" hidden></p>
 
+  <!-- Mientras calcula: una escena distinta por brote. El personaje avanza lo mismo que el cálculo (no se repite en bucle)
+       y, cuando termina, hace su remate: el zombi se lanza a la cámara, el bus arranca, el mosquito pica. -->
   <div class="busy" id="busy" hidden>
-    <img src="logo.svg" alt="" width="96" height="96">
+    <div class="carga" id="carga" data-cut="zombi">
+      <img class="carga-bg" id="cargaBg" alt="">
+      <img class="carga-walker" id="cargaWalker" alt="">
+    </div>
     <p id="busyText">Calculando…</p>
     <div class="meter"><b id="progress"></b></div>
     <div class="policies" id="policies" aria-hidden="true"></div>

@@ -100,6 +100,12 @@ document.addEventListener('click', (e) => {
 $('skipFilm').addEventListener('click', () => toSetup());
 // Al terminar la historia, la página entra sola al simulador.
 startFilm({ onEnd: () => screen === 'setup' && toSetup() });
+// Mientras se ve la historia, el menú marca "La historia" y no "Preparar".
+addEventListener('scroll', () => {
+  if (screen !== 'setup') return;
+  const inStory = $('setupScreen').getBoundingClientRect().top > innerHeight * 0.5;
+  document.querySelectorAll('.stepper [data-screen]').forEach((b) => b.classList.toggle('on', b.dataset.screen === (inStory ? 'historia' : 'setup')));
+}, { passive: true });
 // Entrar con /#simulador lleva directo a "Preparar". El navegador no debe devolver la página arriba.
 history.scrollRestoration = 'manual';
 if (location.hash === '#simulador') addEventListener('load', () => setTimeout(() => toSetup('instant'), 30));
@@ -286,7 +292,8 @@ function setBusy(on, text) {
   for (const b of document.querySelectorAll('[data-preset]')) b.disabled = on;
   $('busy').hidden = !on;
   if (on) {
-    $('progress').style.width = '0';
+    setLoadingScene();
+    setProgress(0);
     resetPolicies();
   }
   if (text) $('busyText').textContent = text;
@@ -297,11 +304,11 @@ function runLocal(config) {
     const worker = new Worker('./worker.js', { type: 'module' });
     worker.onmessage = ({ data }) => {
       if (data.type === 'progress') {
-        if (data.value > 0) $('progress').style.width = `${50 + data.value / 2}%`;
+        if (data.value > 0) setProgress(50 + data.value / 2);
         $('busyText').textContent = data.value > 0 ? `El mejor plan, contra el azar y contra no hacer nada: ${data.text.replace('Simulando: ', '').replace('…', '')}` : data.text;
       } else if (data.type === 'policy') {
         showPolicy(data);
-        $('progress').style.width = `${((data.k + 1) / data.n) * 50}%`;
+        setProgress(((data.k + 1) / data.n) * 50);
       } else if (data.type === 'done') {
         worker.terminate();
         resolve(data.summary);
@@ -317,7 +324,7 @@ function runLocal(config) {
 
 async function runCloud(config) {
   $('busyText').textContent = `Calculando ${config.runs} simulaciones en AWS Lambda…`;
-  $('progress').style.width = '50%';
+  setProgress(50);
   const res = await fetch(`${API_URL.replace(/\/$/, '')}/simulate`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -428,7 +435,8 @@ async function simulate(surprise = null) {
     const summary = useCloud ? await runCloud(config) : await runLocal(config);
     const seconds = (performance.now() - started) / 1000;
     $('busyText').textContent = 'Preparando el barrio…';
-    $('progress').style.width = '100%';
+    setProgress(100);
+    await finale();
     const first = !previous;
     if (first) {
       // Primera vez: se pasa a la pantalla del plan con la cortina.
@@ -656,40 +664,82 @@ function drawCalibration() {
 }
 
 form.addEventListener('input', updateOutputs);
-// Calcular: un zombi se lanza contra la cámara y se traga la pantalla mientras el Comité empieza a calcular.
-function zombieCut() {
+// ---------- Escena de carga y remate de cada brote ----------
+// Fondo y personaje de cada brote: el zombi camina por el mercado, el bus cruza la calle con la gripe
+// y el mosquito vuela sobre los tanques de agua de un barrio después de la lluvia.
+const LOADING = {
+  zombi: { bg: 'img/historia/2_mercado.webp', walker: 'img/carga/zombi.webp' },
+  virus: { bg: 'img/historia/6_alba.webp', walker: 'img/carga/bus.webp' },
+  mosquito: { bg: 'img/carga/calle_dengue.webp', walker: 'img/carga/mosquito.webp' },
+};
+function setLoadingScene() {
   const cut = SCENARIOS[scenario].ui.cut;
-  if (cut !== 'zombi') return swarmCut(cut === 'mosquito' ? 'i-mosquito' : 'i-virus');
+  $('carga').dataset.cut = cut;
+  $('carga').classList.remove('finale');
+  $('cargaBg').src = LOADING[cut].bg;
+  $('cargaWalker').src = LOADING[cut].walker;
+  $('cargaWalker').style.left = '0%';
+}
+// El personaje avanza lo mismo que el cálculo: llega al final cuando el cálculo termina.
+function setProgress(pct) {
+  $('progress').style.width = `${pct}%`;
+  $('cargaWalker').style.left = `${Math.min(100, pct) * 0.78}%`;
+}
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+// Cuando el cálculo terminó: el remate del brote antes de mostrar el plan.
+async function finale() {
+  if (reduced) return;
+  const cut = SCENARIOS[scenario].ui.cut;
+  await wait(650); // deja que el personaje termine de llegar
+  $('carga').classList.add('finale');
+  if (cut === 'zombi') {
+    // El zombi se da vuelta y se lanza contra la cámara (video de Higgsfield).
+    await wait(350);
+    await playZombie();
+  } else {
+    // El bus arranca y suelta la gripe; el mosquito vuela hacia la cámara. La nube tapa la pantalla.
+    swarmCut(cut);
+    await wait(1100);
+  }
+}
+function playZombie() {
   const v = $('zombieCut');
-  if (reduced || !v.canPlayType('video/mp4')) return;
-  v.hidden = false;
-  v.classList.remove('out');
-  v.currentTime = 0;
-  v.volume = 0.55;
-  v.play().catch(() => (v.hidden = true));
-  const end = () => {
-    v.classList.add('out');
-    setTimeout(() => { v.hidden = true; v.pause(); }, 600);
-  };
-  v.onended = end;
-  setTimeout(() => !v.hidden && !v.classList.contains('out') && end(), 6000);
+  if (!v.canPlayType('video/mp4')) return Promise.resolve();
+  return new Promise((resolve) => {
+    let done = false;
+    const end = () => {
+      if (done) return;
+      done = true;
+      v.classList.add('out');
+      setTimeout(() => { v.hidden = true; v.pause(); }, 600);
+      resolve();
+    };
+    v.hidden = false;
+    v.classList.remove('out');
+    v.currentTime = 0;
+    v.volume = 0.55;
+    v.onended = end;
+    v.play().catch(() => { v.muted = true; v.play().catch(end); });
+    setTimeout(end, 4000); // por si el video no avanza
+  });
 }
 // Gripe y dengue: una nube de virus o de mosquitos cubre la pantalla y se disipa.
-function swarmCut(icon) {
-  if (reduced) return;
+function swarmCut(cut) {
+  const piece = (style) => (cut === 'mosquito'
+    ? `<img class="bug" style="${style}" src="img/carga/mosquito.webp" alt="">`
+    : `<svg class="ic bug" style="${style}"><use href="#i-virus"/></svg>`);
   const box = document.createElement('div');
   box.className = 'swarm';
   box.innerHTML = Array.from({ length: 46 }, (_, k) => {
     const a = (k / 46) * Math.PI * 2;
     const style = `--x:${Math.cos(a) * 70}vw;--y:${Math.sin(a) * 70}vh;--d:${(k % 7) * 0.05}s;--s:${0.8 + (k % 5) * 0.35}`;
-    return `<svg class="ic" style="${style}"><use href="#${icon}"/></svg>`;
+    return piece(style);
   }).join('');
   document.body.appendChild(box);
   setTimeout(() => box.remove(), 2000);
 }
 form.addEventListener('submit', (e) => {
   e.preventDefault();
-  if (!busy && !checkForm()) zombieCut();
   simulate();
 });
 form.addEventListener('keydown', (e) => {
@@ -710,6 +760,7 @@ for (const button of document.querySelectorAll('[data-preset]')) {
 
 if (API_URL) $('cloudRow').hidden = false;
 applyScenario('zombi', { runs: 100 });
+$('runBtn').disabled = false;
 const whenLoaded = (fn) => (document.readyState === 'complete' ? fn() : window.addEventListener('load', fn));
 whenLoaded(() => {
   drawCalibration();

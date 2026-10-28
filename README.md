@@ -242,7 +242,7 @@ docs/                arquitectura, costos, resultados, calibración, créditos �
 - Sin llaves ni contraseñas en el código ni en el repositorio.
 - IAM de mínimo privilegio, buckets privados y cifrados, solo HTTPS y límite de peticiones en la API.
 - CloudFront agrega las cabeceras de seguridad administradas por AWS (HSTS, X-Frame-Options, X-Content-Type-Options, Referrer-Policy).
-- La página declara una política de contenido (CSP): solo carga scripts propios y Chart.js desde cdnjs, este último con su huella de integridad (SRI).
+- La página declara una política de contenido (CSP): solo carga scripts propios, más GSAP y Chart.js desde cdnjs, cada uno con su huella de integridad (SRI). Las dos librerías cargan en paralelo y la página funciona aunque no lleguen (sin animación de letras o sin gráfica). El botón "Calcular" se activa recién cuando el código está listo, para que el formulario nunca se envíe solo.
 - Todo texto que viene de la simulación se escapa antes de mostrarse.
 - La API y la página validan cada dato (rangos, mínimos y máximos) y responden con un mensaje claro.
 

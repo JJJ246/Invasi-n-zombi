@@ -50,17 +50,25 @@ button, input, select { font: inherit; }
 body.on-results .bg-film { opacity: 0.25; }
 
 /* La historia */
-.film { position: relative; height: 820vh; margin-top: calc(-1 * var(--top)); }
+.film { position: relative; height: 900vh; margin-top: calc(-1 * var(--top)); }
 .film-sticky { position: sticky; top: 0; height: 100vh; overflow: hidden; }
 #filmCanvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; background: var(--bg); }
-.captions { position: absolute; left: 6vw; right: 6vw; bottom: 13vh; pointer-events: none; }
-.cap { position: absolute; left: 0; bottom: 0; max-width: 46rem; margin: 0; opacity: 0; visibility: hidden; will-change: opacity, transform;
-  font-size: clamp(1.35rem, 2.8vw, 2.3rem); line-height: 1.3; font-weight: 600; text-shadow: 0 2px 24px #000, 0 0 2px #000; }
-.cap .time { display: block; margin-bottom: 0.5rem; font: 400 clamp(0.95rem, 1.4vw, 1.15rem) var(--type); color: var(--accent-2); letter-spacing: 0.04em; }
+.captions { position: absolute; inset: calc(var(--top) + 4vh) 6vw 13vh; pointer-events: none; perspective: 700px; }
+.cap { position: absolute; max-width: 52rem; margin: 0; opacity: 0; visibility: hidden; text-shadow: 0 3px 28px #000, 0 0 3px #000; }
+.cap[data-pos="abajo"] { left: 0; bottom: 0; }
+.cap[data-pos="arriba"] { right: 0; top: 0; text-align: right; }
+.cap[data-pos="centro"] { left: 50%; top: 50%; transform: translate(-50%, -50%); width: min(52rem, 88vw); text-align: center; }
+.cap .time { display: block; margin-bottom: 0.4rem; font: 400 clamp(0.95rem, 1.4vw, 1.2rem) 'Special Elite', monospace; color: #ffb35c; letter-spacing: 0.06em; }
+/* Los títulos de la historia van siempre con la letra de Halloween del Comité, sin importar el brote elegido. */
+.cap .hl { margin: 0; font: 400 clamp(2.6rem, 6.4vw, 5.6rem)/1 'Creepster', 'Special Elite', cursive; letter-spacing: 0.04em; color: #ff8a1f;
+  text-shadow: 0 0 28px #ff7a1a66, 0 4px 0 #3a1500, 0 6px 30px #000; }
+.cap .hl.green { color: #9cf06b; text-shadow: 0 0 28px #9cf06b66, 0 4px 0 #13300a, 0 6px 30px #000; }
+.cap .hl .w { display: inline-block; white-space: nowrap; }
+.cap .hl .ch, .cap .time .ch { display: inline-block; transform-origin: 50% 80%; }
+.cap .sub { margin: 0.7rem 0 0; font-size: clamp(1.1rem, 2vw, 1.6rem); line-height: 1.35; font-weight: 600; color: #f3ead8; }
 .cap .red { color: #ff5a5f; }
-.cap .green { color: var(--good); }
-.cap.final { font: 400 clamp(2.2rem, 5vw, 4.2rem)/1.05 var(--horror); color: var(--accent); letter-spacing: 0.03em; }
-.cap.final .time { font-size: 1.1rem; }
+.cap .sub b:not(.red) { color: #9cf06b; }
+.cap.final .hl { font-size: clamp(3.2rem, 8vw, 7rem); }
 .film-ui { position: absolute; left: 6vw; right: 6vw; bottom: 5vh; display: flex; align-items: center; gap: 1rem; }
 .film-progress { flex: 1; height: 2px; background: #ffffff22; overflow: hidden; }
 .film-progress b { display: block; height: 100%; background: var(--accent); transform-origin: left; transform: scaleX(0); }
@@ -339,10 +347,28 @@ button.ghost { background: transparent; color: var(--muted); }
 .changes .delta s { color: var(--muted); font-weight: 400; margin-right: 0.3rem; }
 .changes ul { margin: 0.6rem 0 0; padding-left: 1.1rem; font-size: 0.82rem; }
 
-/* Calculando: la mano sale de la tierra */
-.busy { animation: fade 0.35s ease-out both; position: fixed; z-index: 50; inset: 0; display: grid; place-content: center; justify-items: center; gap: 0.8rem; background: color-mix(in srgb, var(--bg) 85%, transparent); backdrop-filter: blur(4px); }
-.busy img { animation: emerge 1.4s ease-in-out infinite alternate; filter: drop-shadow(0 0 20px color-mix(in srgb, var(--good) 33%, transparent)); }
-@keyframes emerge { from { transform: translateY(10px) rotate(-6deg); } to { transform: translateY(-8px) rotate(6deg); } }
+/* Calculando: una escena por brote; el personaje avanza con el cálculo y al final hace su remate */
+.busy { animation: fade 0.35s ease-out both; position: fixed; z-index: 50; inset: 0; display: grid; place-content: center; justify-items: center; gap: 0.8rem; background: color-mix(in srgb, var(--bg) 88%, transparent); backdrop-filter: blur(4px); }
+.carga { position: relative; width: min(860px, 92vw); aspect-ratio: 21 / 8; overflow: hidden; border: 1px solid var(--line); border-radius: 14px; background: #000; box-shadow: 0 20px 60px #000c, 0 0 40px color-mix(in srgb, var(--accent) 18%, transparent); }
+.carga-bg { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; filter: brightness(0.55) saturate(0.9); animation: carga-cam 14s ease-out both; }
+@keyframes carga-cam { from { transform: scale(1.12); } to { transform: scale(1); } }
+.carga::after { content: ''; position: absolute; inset: 0; background: linear-gradient(to top, #000c, transparent 45%), radial-gradient(ellipse at center, transparent 50%, #000a); pointer-events: none; }
+.carga-walker { position: absolute; z-index: 1; bottom: 4%; left: 0; height: 74%; transition: left 0.9s linear; filter: drop-shadow(0 8px 10px #000) brightness(0.9); }
+.carga[data-cut="zombi"] .carga-walker { animation: shamble 1.3s ease-in-out infinite; transform-origin: 50% 100%; }
+.carga[data-cut="virus"] .carga-walker { height: 50%; bottom: 3%; animation: bus-bump 0.5s ease-in-out infinite; }
+.carga[data-cut="mosquito"] .carga-walker { height: 34%; bottom: 40%; animation: buzz 0.9s ease-in-out infinite; }
+/* El paso del personaje (no la escena) es lo único que se repite. */
+@keyframes shamble { 25% { transform: rotate(-3deg) translateY(-3%); } 50% { transform: rotate(1deg); } 75% { transform: rotate(3deg) translateY(-2%); } }
+@keyframes bus-bump { 50% { transform: translateY(-1.5%); } }
+@keyframes buzz { 25% { transform: translate(2%, -18%) rotate(-6deg); } 75% { transform: translate(-1%, 14%) rotate(5deg); } }
+/* Remates */
+.carga.finale .carga-walker { transition: none; animation: none; }
+.carga.finale[data-cut="zombi"] .carga-walker { animation: lunge 0.5s cubic-bezier(.5, 0, .9, .4) forwards; }
+.carga.finale[data-cut="virus"] .carga-walker { animation: drive-off 0.9s cubic-bezier(.6, 0, .9, .5) forwards; }
+.carga.finale[data-cut="mosquito"] .carga-walker { animation: bite 0.9s cubic-bezier(.6, 0, .8, .4) forwards; }
+@keyframes lunge { to { transform: translate(-10%, 8%) scale(1.8); filter: brightness(1.4) drop-shadow(0 0 30px #9cf06b); } }
+@keyframes drive-off { 30% { transform: translateX(-4%); } to { transform: translateX(160%); } }
+@keyframes bite { to { transform: translate(-60%, 20%) scale(5); filter: blur(4px); opacity: 0.2; } }
 .busy p { margin: 0; font: 1rem var(--type); color: var(--text); }
 .meter { width: 260px; height: 10px; border-radius: 999px; background: var(--panel-2); overflow: hidden; border: 1px solid var(--line); }
 .meter b { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--good), color-mix(in srgb, var(--good) 60%, white)); box-shadow: 0 0 12px var(--good); transition: width 0.3s; }
@@ -434,7 +460,7 @@ button.link { display: inline; background: none; border: 0; padding: 0; color: v
 
 /* Gripe y dengue: nube de virus o mosquitos al calcular */
 .swarm { position: fixed; inset: 0; z-index: 90; pointer-events: none; display: grid; place-items: center; animation: swarm-bg 1.9s ease-in-out forwards; }
-.swarm .ic { position: absolute; width: 46px; height: 46px; color: var(--accent); filter: drop-shadow(0 0 10px var(--accent)); animation: swarm-in 1.3s cubic-bezier(.5, 0, .2, 1) var(--d) both; }
+.swarm .bug { position: absolute; width: 46px; height: 46px; object-fit: contain; color: var(--accent); filter: drop-shadow(0 0 10px var(--accent)); animation: swarm-in 1.3s cubic-bezier(.5, 0, .2, 1) var(--d) both; }
 @keyframes swarm-in { from { transform: translate(var(--x), var(--y)) scale(var(--s)) rotate(0); opacity: 0; } 30% { opacity: 1; } to { transform: translate(0, 0) scale(calc(var(--s) * 6)) rotate(200deg); opacity: 0; } }
 @keyframes swarm-bg { 0% { background: transparent; } 55% { background: color-mix(in srgb, var(--bg) 92%, transparent); } 100% { background: transparent; } }
 

@@ -404,7 +404,15 @@ export class Barrio {
   view(name) {
     this.camName = name;
     const c = this.cams()[name];
-    this.camTarget = { zoom: c.zoom, center: c.center };
+    // Si el edificio está cerca del borde, la cámara no puede centrarlo: se apunta al punto más cercano
+    // que sí se ve con ese acercamiento. Antes la cámara se quedaba temblando contra el borde.
+    const [zoom, center] = [this.zoom, this.center];
+    this.center = c.center;
+    this.setZoom(c.zoom);
+    const reachable = this.center;
+    this.center = center;
+    this.setZoom(zoom);
+    this.camTarget = { zoom: c.zoom, center: reachable };
     this.camsEl.querySelectorAll('[data-cam]').forEach((b) => b.classList.toggle('on', b.dataset.cam === name));
   }
 
@@ -416,7 +424,9 @@ export class Barrio {
     const z = this.zoom + (t.zoom - this.zoom) * k;
     const cx = this.center[0] + (t.center[0] - this.center[0]) * k;
     const cy = this.center[1] + (t.center[1] - this.center[1]) * k;
-    const done = Math.abs(z - t.zoom) < 0.003 && Math.hypot(cx - t.center[0], cy - t.center[1]) < 0.02;
+    // Llega cuando está a un pelo del destino o, por seguridad, a los dos segundos.
+    t.frames = (t.frames ?? 0) + 1;
+    const done = t.frames > 120 || (Math.abs(z - t.zoom) < 0.003 && Math.hypot(cx - t.center[0], cy - t.center[1]) < 0.02);
     this.center = done ? t.center : [cx, cy];
     this.setZoom(done ? t.zoom : z);
     if (done) this.camTarget = null;

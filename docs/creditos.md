@@ -16,3 +16,10 @@ Ambas se redujeron de tamaño y se convirtieron a WebP.
 - `web/img/zombi.mp4`: el zombi que se lanza contra la cámara al calcular (Seedance 2.5, 1080p, recortado a 2 segundos).
 - `web/img/suelo/`: texturas del suelo del barrio (asfalto, arena, mar, tierra, vereda y suelo seco).
 - `web/img/barrio/`: además de los edificios, los contenedores, la panga, la palmera y los restos del apocalipsis (auto quemado, barricada, basura y barril con fuego), que aparecen según cuántos zombis hay.
+
+## Pantalla de carga (Higgsfield, GPT Image 2.5)
+- `web/img/carga/`: zombi, bus de Manta y mosquito Aedes con fondo transparente, y la calle del dengue. El personaje avanza lo mismo que el cálculo y al final hace su remate (`web/app.js`, `setProgress` y `finale`).
+
+## Librerías
+- [GSAP 3.13](https://gsap.com/) (licencia estándar de GSAP, uso gratuito): animación letra por letra de los textos de la historia.
+- [Chart.js 4.4](https://www.chartjs.org/) (MIT): curvas y calibración.
