@@ -46,6 +46,8 @@ for (const name of ['asfalto', 'arena', 'mar', 'tierra', 'vereda', 'suelo']) {
   TEX[name] = img;
 }
 const GROUND_TEX = { seco: 'suelo', tierra: 'tierra', arena: 'arena', urbano: 'vereda', verde: 'suelo' };
+// Color del ambiente cuando el brote crece (tinte que oscurece y niebla), según la enfermedad.
+const MOOD = { zombi: ['120, 150, 120', '110, 230, 120'], influenza: ['135, 145, 165', '170, 200, 230'], dengue: ['165, 155, 110', '230, 210, 110'] };
 const WORK_SPRITE = { oficinas: 'oficinas', atunera: 'atunera', astillero: 'astillero', laboratorio: 'laboratorio', fabrica: 'fabrica' };
 // Qué pieza usa cada casa según sus pisos, su techo y si es de caña o palafito.
 const houseSprite = (hs) => {
@@ -200,21 +202,29 @@ export class Barrio {
     this.canvas.addEventListener('pointermove', (e) => {
       const r = this.canvas.getBoundingClientRect();
       this.mouse = [(e.clientX - r.left) * this.dpr, (e.clientY - r.top) * this.dpr];
-      if (drag) {
+      // Un clic con la mano un poco temblorosa no es un arrastre: recién desde 8 píxeles se mueve la cámara.
+      if (drag && !drag.moved && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 8) {
+        drag.moved = true;
+        drag.center = [...this.center];
+        drag.x = e.clientX;
+        drag.y = e.clientY;
+        this.camTarget = null;
+      }
+      if (drag?.moved) {
         const dx = ((e.clientX - drag.x) * this.dpr * 2) / this.tw;
         const dy = ((e.clientY - drag.y) * this.dpr * 4) / this.tw;
-        if (Math.abs(dx) + Math.abs(dy) > 0.15) drag.moved = true;
-        // Pantalla → casillas: x − y cambia con el arrastre horizontal, x + y con el vertical.
+        // De pantalla a casillas: x menos y cambia con el arrastre horizontal, x más y con el vertical.
         const [mx, my] = this.mirror ? [-(dx - dy) / 2, -(dx + dy) / 2] : [-(dx + dy) / 2, -(dy - dx) / 2];
-        this.camTarget = null;
         this.setCenter(drag.center[0] + mx, drag.center[1] + my);
       }
-      this.canvas.style.cursor = drag?.moved ? 'grabbing' : this.hitAt(e) >= 0 ? 'pointer' : 'grab';
+      this.canvas.style.cursor = drag?.moved ? 'grabbing' : this.hitAt(e) >= 0 || this.buildingAt(e) >= 0 ? 'pointer' : 'grab';
     });
     this.canvas.addEventListener('pointerup', (e) => {
       if (drag && !drag.moved) {
+        // Primero una persona; si no, el edificio que está debajo (y se muestra a alguien de ahí).
         const i = this.hitAt(e);
-        if (i >= 0) this.player.select(i);
+        const j = i >= 0 ? i : this.buildingAt(e);
+        if (j >= 0) this.player.select(j);
       }
       drag = null;
     });
@@ -1525,6 +1535,38 @@ export class Barrio {
     ctx.textAlign = 'start';
   }
 
+  // ¿Qué edificio hay bajo el puntero? Devuelve a una persona de ese lugar (o -1): de una casa, alguien
+  // que vive ahí; del colegio, un estudiante; de la parada o el bus, un pasajero; del mercado, un vecino.
+  buildingAt(e) {
+    if (!this.houses || !this.trace) return -1;
+    const r = this.canvas.getBoundingClientRect();
+    const x = (e.clientX - r.left) * this.dpr;
+    const y = (e.clientY - r.top) * this.dpr;
+    const inside = (bx, by, w, h, z) => {
+      const xs = [this.P(bx, by)[0], this.P(bx + w, by)[0], this.P(bx, by + h)[0], this.P(bx + w, by + h)[0]];
+      const bottom = Math.max(this.P(bx + w, by + h)[1], this.P(bx, by + h)[1], this.P(bx + w, by)[1]);
+      const top = this.P(bx, by, z)[1];
+      return x >= Math.min(...xs) && x <= Math.max(...xs) && y >= top && y <= bottom;
+    };
+    // Lo de adelante tapa a lo de atrás: se revisa de adelante hacia atrás.
+    const story = this.trace.nada.story;
+    const pickFrom = (list) => list.length ? list.slice().sort((a, b) => (story.infectedDay[b.i] >= 0) - (story.infectedDay[a.i] >= 0) || a.i - b.i)[0].i : -1;
+    const houses = this.houses.slice().sort((a, b) => b.x + b.y - (a.x + a.y));
+    for (const hs of houses) if (inside(hs.x, hs.y, 1, 1, hs.z + 0.8)) return pickFrom(this.people.filter((p) => this.houses[p.house] === hs));
+    if (this.busAt && inside(this.busAt.x - 1.2, this.busAt.y - 0.45, 2.4, 0.9, 1)) return pickFrom(this.people.filter((p) => p.bus));
+    const st = this.stop;
+    if (inside(st.x - 0.8, st.y - 0.6, 1.6, 0.9, 1.2)) return pickFrom(this.people.filter((p) => p.bus));
+    const sb = this.places.school.box;
+    if (inside(sb.x, sb.y, sb.w, sb.h, sb.z + 0.6)) return pickFrom(this.people.filter((p) => p.role === 1));
+    const sa = this.places.school.area;
+    if (inside(sa.x, sa.y, sa.w, sa.h, 0.2)) return pickFrom(this.people.filter((p) => p.role === 1));
+    const ma = this.places.market.area;
+    if (inside(ma.x, ma.y, ma.w, ma.h, 1)) return pickFrom(this.people.filter((p) => p.role === 0));
+    const wk = this.places.work;
+    if (inside(wk.box.x, wk.box.y, wk.box.w, wk.box.h, wk.box.z + 0.5)) return pickFrom(this.people.filter((p) => p.role === 2 && !p.bus));
+    return -1;
+  }
+
   hitAt(e) {
     const r = this.canvas.getBoundingClientRect();
     const x = (e.clientX - r.left) * this.dpr;
@@ -1614,7 +1656,8 @@ export class Barrio {
       items.push({ key: hs.x + hs.y + 1, draw: () => this.drawHouse(ctx, hs, night, quarantined) });
     }
     for (const d of this.decor) {
-      if (d.type === 'resto' && this.gloom < d.th) continue;
+      // Restos según el brote: en el mundo zombi todo; con dengue, basura (criaderos); con gripe, nada.
+      if (d.type === 'resto' && (this.gloom < d.th || (this.mood === 'influenza') || (this.mood === 'dengue' && d.name !== 'basura'))) continue;
       const special = { contenedores: () => this.sprite(ctx, 'contenedores', d.x, d.y, 1.6, 1.2), resto: () => this.sprite(ctx, d.name, d.x, d.y, d.name === 'auto_quemado' ? 1.1 : 0.7, d.name === 'auto_quemado' ? 0.6 : 0.6), bote: () => this.drawBoat(ctx, d, now), auto: () => this.drawCar(ctx, d), iglesia: () => this.drawChurch(ctx, d, night), farol: () => this.drawLamp(ctx, d, night), ropa: () => this.drawLaundry(ctx, d, now), maceta: () => this.drawPot(ctx, d), tacho: () => this.drawBin(ctx, d), bandera: () => this.drawFlag(ctx, d, now), aro: () => this.drawHoop(ctx, d) };
       const draw = special[d.type] ?? (() => this.drawTree(ctx, d, now));
       items.push({ key: d.type === 'iglesia' ? d.x + d.y + 2.6 : d.x + d.y + (d.type === 'bote' ? 0.8 : 0), draw });
@@ -1641,6 +1684,7 @@ export class Barrio {
     const st = this.stop;
     items.push({ key: st.x + st.y - 0.6, draw: () => this.box(ctx, { x: st.x - 0.55, y: st.y - 0.5, w: 1.1, h: 0.3, z: 0.75 }, '#5d6d7e', '#2f80ed') });
     let busVisible = false;
+    this.busAt = null;
     if (this.hasBus) {
       const c = ROADS[0];
       const x0 = this.plan.landX(c) - 3;
@@ -1681,15 +1725,16 @@ export class Barrio {
       const { width: GW, height: GH } = this.canvas;
       ctx.save();
       ctx.globalCompositeOperation = 'multiply';
-      ctx.fillStyle = `rgba(120, 150, 120, ${0.6 * this.gloom})`;
+      const [tint, fog] = MOOD[this.mood] ?? MOOD.zombi;
+      ctx.fillStyle = `rgba(${tint}, ${0.6 * this.gloom})`;
       ctx.fillRect(0, 0, GW, GH);
       ctx.globalCompositeOperation = 'source-over';
       for (let k = 0; k < 6; k++) {
         const fx = (((now / 40000) * (k % 2 ? 1 : -1) + hash(k, 31)) % 1 + 1) % 1 * GW;
         const fy = GH * (0.15 + 0.15 * k);
         const g = ctx.createRadialGradient(fx, fy, 0, fx, fy, GW * 0.35);
-        g.addColorStop(0, `rgba(110, 230, 120, ${0.16 * this.gloom})`);
-        g.addColorStop(1, 'rgba(110, 230, 120, 0)');
+        g.addColorStop(0, `rgba(${fog}, ${0.16 * this.gloom})`);
+        g.addColorStop(1, `rgba(${fog}, 0)`);
         ctx.fillStyle = g;
         ctx.fillRect(0, 0, GW, GH);
       }

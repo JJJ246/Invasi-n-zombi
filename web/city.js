@@ -176,7 +176,7 @@ export class CityPlayer {
 
   select(i) {
     this.selected = i;
-    this.show(this.day);
+    this.show(this.day, true); // elegir a alguien no cambia la hora del día
     this.onSelect?.(i);
   }
 

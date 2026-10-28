@@ -8,13 +8,13 @@
   <meta name="description" content="Simula cómo se propaga una plaga en Manta y encuentra a quién vacunar, qué cerrar y dónde actuar con recursos limitados.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Creepster&family=Special+Elite&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Creepster&family=Special+Elite&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css">
   <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" defer></script>
   <script src="config.js"></script>
   <script type="module" src="app.js"></script>
 </head>
-<body>
+<body data-theme="zombi">
   <!-- Íconos (se usan con <use href="#i-…">) -->
   <svg width="0" height="0" style="position:absolute" aria-hidden="true">
     <symbol id="i-bio" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><circle cx="7.5" cy="15.2" r="4"/><circle cx="16.5" cy="15.2" r="4"/><circle cx="12" cy="12.6" r="1.6"/></symbol>
@@ -92,6 +92,7 @@
 
   <main class="app">
     <!-- Pantalla 1: preparar el brote -->
+    <span class="anchor" id="simulador"></span>
     <section class="screen setup-screen" id="setupScreen">
       <div class="intro">
         <h1>¿Cómo frenamos la plaga?</h1>

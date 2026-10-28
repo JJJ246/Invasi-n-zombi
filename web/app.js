@@ -94,7 +94,9 @@ document.addEventListener('click', (e) => {
 $('skipFilm').addEventListener('click', () => toSetup());
 // Al terminar la historia, la página entra sola al simulador.
 startFilm({ onEnd: () => screen === 'setup' && toSetup() });
-if (location.hash === '#simulador') requestAnimationFrame(() => toSetup('instant'));
+// Entrar con /#simulador lleva directo a "Preparar". El navegador no debe devolver la página arriba.
+history.scrollRestoration = 'manual';
+if (location.hash === '#simulador') addEventListener('load', () => setTimeout(() => toSetup('instant'), 30));
 $('backBtn').addEventListener('click', () => showScreen('setup'));
 // Al ir a la portada, la cortina cae antes de cambiar de página.
 for (const a of document.querySelectorAll('a[data-wipe]')) {
@@ -156,6 +158,10 @@ function applyScenario(key, keep = {}) {
   const base = makeConfig({ city });
   setForm({ ...base, ...s.config, city, ...keep });
   form.querySelector(`input[name="scenario"][value="${key}"]`).checked = true;
+  // Cada brote cambia la paleta, los títulos y los textos de toda la página.
+  document.body.dataset.theme = key;
+  document.querySelector('.intro h1').textContent = s.ui.h1;
+  document.querySelector('.intro .lead').innerHTML = s.ui.lead;
   renderLegend();
 }
 
@@ -317,6 +323,7 @@ function loadCity(s) {
       worker.terminate();
       if (data.type === 'trace') {
         barrio.load(data.trace, makeConfig(s.config), SCENARIOS[scenario].theme, terms());
+        barrio.mood = scenario;
         tree.load(data.trace, SCENARIOS[scenario].theme);
         player.load(data.trace, s.config, s.runs, terms());
         vecino.hidden = true;
@@ -594,6 +601,8 @@ function drawCalibration() {
 form.addEventListener('input', updateOutputs);
 // Calcular: un zombi se lanza contra la cámara y se traga la pantalla mientras el Comité empieza a calcular.
 function zombieCut() {
+  const cut = SCENARIOS[scenario].ui.cut;
+  if (cut !== 'zombi') return swarmCut(cut === 'mosquito' ? 'i-mosquito' : 'i-virus');
   const v = $('zombieCut');
   if (reduced || !v.canPlayType('video/mp4')) return;
   v.hidden = false;
@@ -607,6 +616,19 @@ function zombieCut() {
   };
   v.onended = end;
   setTimeout(() => !v.hidden && !v.classList.contains('out') && end(), 6000);
+}
+// Gripe y dengue: una nube de virus o de mosquitos cubre la pantalla y se disipa.
+function swarmCut(icon) {
+  if (reduced) return;
+  const box = document.createElement('div');
+  box.className = 'swarm';
+  box.innerHTML = Array.from({ length: 46 }, (_, k) => {
+    const a = (k / 46) * Math.PI * 2;
+    const style = `--x:${Math.cos(a) * 70}vw;--y:${Math.sin(a) * 70}vh;--d:${(k % 7) * 0.05}s;--s:${0.8 + (k % 5) * 0.35}`;
+    return `<svg class="ic" style="${style}"><use href="#${icon}"/></svg>`;
+  }).join('');
+  document.body.appendChild(box);
+  setTimeout(() => box.remove(), 2000);
 }
 form.addEventListener('submit', (e) => {
   e.preventDefault();
