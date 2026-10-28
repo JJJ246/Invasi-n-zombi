@@ -2,7 +2,7 @@
 
 | Carpeta o archivo | Qué es |
 |---|---|
-| `historia/` | Las 8 escenas de la película del principio (generadas con Higgsfield). |
+| `historia/` | Dos escenas que se usan de fondo en la pantalla de carga y el fondo difuminado del sitio (Higgsfield). |
 | `halloween/` | Adornos de "Preparar": patrón de fondo, calabaza, murciélagos, telaraña y velas (Higgsfield). |
 | `prueba/` | Barrios pintados, máscaras de calles (`paso_*.png`), vecinos, ciclos de caminata y el video del mosquito. |
 | `carga/` | La escena de carga de cada brote: el zombi, el bus de la gripe, el mosquito del dengue y la calle de barrio con tanques de agua (Higgsfield). |
